@@ -1,0 +1,46 @@
+app:
+  name: "locus"
+  environment: "local"
+  log_level: "INFO"
+
+data:
+  raw_dir: "data/raw"
+  interim_dir: "data/interim"
+  processed_dir: "data/processed"
+  parquet_compression: "snappy"
+
+model:
+  default_horizon_hours: 24
+  random_seed: 42
+
+portfolio:
+  max_weight_per_asset: 0.10
+  max_total_exposure: 1.0
+  min_cash_weight: 0.05
+  max_turnover: 0.30
+
+risk:
+  max_daily_loss_pct: 0.02
+  max_drawdown_pct: 0.15
+  kill_switch_enabled: true
+
+backtest:
+  fee_bps: 10.0
+  spread_bps: 5.0
+  slippage_bps: 5.0
+  impact_model: "sqrt_volume"
+  impact_k: 1.0
+  initial_capital: 10000.0
+  fee_schedule_version: "binance-spot-2026-01"
+
+signal_execution:
+  feature_compute_time: "bar_close_T"
+  signal_availability_time: "bar_close_T"
+  earliest_execution_time: "bar_open_T+1"
+  rebalance_cadence_hours: 24
+  rebalance_anchor: "00:00 UTC"
+  holding_period_hours: 24
+  signal_used_at_rebalance: "close_T-1"
+  intermediate_signals_used_for_execution: false
+  hysteresis_bps: 50.0
+  execution_price: "bar_open_T+1"

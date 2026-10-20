@@ -1,0 +1,52 @@
+services:
+  locus-dev:
+    build:
+      context: .
+      target: dev-cpu
+    image: locus:dev-cpu
+    container_name: locus-dev
+    volumes:
+      - .:/app:cached
+      - uv-cache:/root/.cache/uv
+      - pyright-cache:/root/.cache/pyright-python
+      - locus-venv:/app/.venv
+    environment:
+      - APP__ENVIRONMENT=local
+      - APP__LOG_LEVEL=DEBUG
+    working_dir: /app
+    tty: true
+    stdin_open: true
+    command: sleep infinity
+
+  locus-dev-gpu:
+    profiles: ["gpu"]
+    build:
+      context: .
+      target: dev-gpu
+    image: locus:dev-gpu
+    container_name: locus-dev-gpu
+    volumes:
+      - .:/app:cached
+      - uv-cache:/root/.cache/uv
+      - pyright-cache:/root/.cache/pyright-python
+      - locus-venv:/app/.venv
+    environment:
+      - APP__ENVIRONMENT=local
+      - APP__LOG_LEVEL=DEBUG
+      - NVIDIA_VISIBLE_DEVICES=all
+    working_dir: /app
+    tty: true
+    stdin_open: true
+    command: sleep infinity
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  uv-cache:
+  pyright-cache:
+  locus-venv:

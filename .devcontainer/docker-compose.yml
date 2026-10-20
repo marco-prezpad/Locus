@@ -1,0 +1,23 @@
+services:
+  locus-dev:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: dev-cpu
+    image: locus:dev-cpu
+    container_name: locus-devcontainer
+    volumes:
+      - ..:/app:cached
+      - uv-cache:/root/.cache/uv
+      - pyright-cache:/root/.cache/pyright-python
+      - locus-venv:/app/.venv
+    environment:
+      - APP__ENVIRONMENT=dev
+      - APP__LOG_LEVEL=DEBUG
+    working_dir: /app
+    tty: true
+
+volumes:
+  uv-cache:
+  pyright-cache:
+  locus-venv:

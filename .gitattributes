@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.sh text eol=lf
+Makefile text eol=lf
+Dockerfile text eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.parquet binary
+*.pkl binary

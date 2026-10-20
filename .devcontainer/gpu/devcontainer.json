@@ -1,0 +1,28 @@
+{
+  "name": "locus (GPU)",
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "locus-dev-gpu",
+  "workspaceFolder": "/app",
+  "runServices": ["locus-dev-gpu"],
+  "shutdownAction": "stopCompose",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "charliermarsh.ruff",
+        "ms-python.debugpy",
+        "tamasfe.even-better-toml",
+        "redhat.vscode-yaml"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/app/.venv/bin/python",
+        "python.testing.pytestEnabled": true,
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "charliermarsh.ruff"
+      }
+    }
+  },
+  "postCreateCommand": "uv sync --frozen --extra all",
+  "remoteUser": "root"
+}

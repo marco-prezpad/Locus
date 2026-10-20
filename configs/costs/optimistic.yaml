@@ -1,0 +1,4 @@
+fee_bps: 5.0
+spread_bps: 2.0
+slippage_bps: 2.0
+impact_k: 0.5
