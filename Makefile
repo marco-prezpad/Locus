@@ -17,6 +17,15 @@ fix:
 	uv run ruff format --diff src tests > logs/ruff-format/ruff-format-diff-$$ts.log 2>&1 || true; \
 	uv run ruff format src tests
 
+fix-unsafe:
+	@mkdir -p logs/ruff-check
+	@mkdir -p logs/ruff-format
+	@ts=$$(date +%Y%m%d-%H%M%S); \
+	uv run ruff check --diff src tests > logs/ruff-check/ruff-check-diff-$$ts.log 2>&1 || true; \
+	uv run ruff check --fix --unsafe-fixes src tests; \
+	uv run ruff format --diff src tests > logs/ruff-format/ruff-format-diff-$$ts.log 2>&1 || true; \
+	uv run ruff format src tests
+
 typecheck:
 	uv run pyright
 
