@@ -8,6 +8,13 @@ data:
   interim_dir: "data/interim"
   processed_dir: "data/processed"
   parquet_compression: "snappy"
+  providers:
+    binance:
+      base_url: "https://api.binance.com"
+      max_bars_per_request: 1000
+      requests_per_minute: 1000
+      timeout_seconds: 30
+      max_retries: 5
 
 model:
   default_horizon_hours: 24

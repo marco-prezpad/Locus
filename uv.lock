@@ -2226,6 +2226,7 @@ dependencies = [
 all = [
     { name = "accelerate" },
     { name = "cvxpy" },
+    { name = "httpx" },
     { name = "jupyter" },
     { name = "lightgbm" },
     { name = "matplotlib" },
@@ -2240,11 +2241,13 @@ all = [
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "pytest-httpx" },
     { name = "ruff" },
     { name = "scikit-learn" },
     { name = "scipy" },
     { name = "seaborn" },
     { name = "streamlit" },
+    { name = "tenacity" },
     { name = "torch" },
     { name = "tqdm" },
     { name = "transformers" },
@@ -2258,17 +2261,20 @@ dashboard = [
     { name = "streamlit" },
 ]
 data = [
+    { name = "httpx" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "polars" },
     { name = "pyarrow" },
     { name = "scipy" },
+    { name = "tenacity" },
 ]
 dev = [
     { name = "pre-commit" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "pytest-httpx" },
     { name = "ruff" },
 ]
 dl = [
@@ -2287,6 +2293,7 @@ mlops = [
 ]
 mvp = [
     { name = "cvxpy" },
+    { name = "httpx" },
     { name = "lightgbm" },
     { name = "mlflow" },
     { name = "numpy" },
@@ -2299,10 +2306,12 @@ mvp = [
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-cov" },
+    { name = "pytest-httpx" },
     { name = "ruff" },
     { name = "scikit-learn" },
     { name = "scipy" },
     { name = "streamlit" },
+    { name = "tenacity" },
     { name = "xgboost" },
 ]
 notebooks = [
@@ -2316,6 +2325,7 @@ notebooks = [
 requires-dist = [
     { name = "accelerate", marker = "extra == 'dl'", specifier = ">=1.1" },
     { name = "cvxpy", marker = "extra == 'backtest'", specifier = ">=1.6" },
+    { name = "httpx", marker = "extra == 'data'", specifier = ">=0.27" },
     { name = "jupyter", marker = "extra == 'notebooks'", specifier = ">=1.1" },
     { name = "lightgbm", marker = "extra == 'ml'", specifier = ">=4.5" },
     { name = "locus", extras = ["dev", "data", "ml", "backtest", "dashboard", "mlops"], marker = "extra == 'mvp'" },
@@ -2334,12 +2344,14 @@ requires-dist = [
     { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.390" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0" },
+    { name = "pytest-httpx", marker = "extra == 'dev'", specifier = ">=0.32" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.17.1" },
     { name = "scikit-learn", marker = "extra == 'ml'", specifier = ">=1.5" },
     { name = "scipy", marker = "extra == 'data'", specifier = ">=1.14" },
     { name = "seaborn", marker = "extra == 'notebooks'", specifier = ">=0.13" },
     { name = "streamlit", marker = "extra == 'dashboard'", specifier = ">=1.40" },
+    { name = "tenacity", marker = "extra == 'data'", specifier = ">=9.0" },
     { name = "torch", marker = "extra == 'dl'", specifier = ">=2.5", index = "https://download.pytorch.org/whl/cu128" },
     { name = "tqdm", marker = "extra == 'notebooks'", specifier = ">=4.66" },
     { name = "transformers", marker = "extra == 'dl'", specifier = ">=4.45" },
@@ -3988,6 +4000,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pytest-httpx"
+version = "0.36.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/42/f53c58570e80d503ade9dd42ce57f2915d14bcbe25f6308138143950d1d6/pytest_httpx-0.36.2.tar.gz", hash = "sha256:05a56527484f7f4e8c856419ea379b8dc359c36801c4992fdb330f294c690356", size = 57683, upload-time = "2026-04-09T13:57:19.837Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/55/1fa65f8e4fceb19dd6daa867c162ad845d547f6058cd92b4b02384a44777/pytest_httpx-0.36.2-py3-none-any.whl", hash = "sha256:d42ebd5679442dc7bfb0c48e0767b6562e9bc4534d805127b0084171886a5e22", size = 20315, upload-time = "2026-04-09T13:57:18.587Z" },
+]
+
+[[package]]
 name = "python-dateutil"
 version = "2.9.0.post0"
 source = { registry = "https://pypi.org/simple" }
@@ -4970,6 +4995,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2bb238361cd4ae6125a569b4db67cd9e79846ba2d68c/sympy-1.14.0.tar.gz", hash = "sha256:d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517", size = 7793921, upload-time = "2025-04-27T18:05:01.611Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5", size = 6299353, upload-time = "2025-04-27T18:04:59.103Z" },
+]
+
+[[package]]
+name = "tenacity"
+version = "9.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/9e/497c1c8ebe5a5b5d1d4a7511aea22c0bb1a97e3170d98abdef0e1b34265a/tenacity-9.2.1.tar.gz", hash = "sha256:a606b5c808d0cded4a359d5b9932d867ff2a6a6b64d37350260fd01bbdf83839", size = 58261, upload-time = "2026-10-07T12:13:01.633Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d6/26/1ff2b0721ac66a3ec5b1402b333110b352ab0a8724052ac279a7b82d40c4/tenacity-9.2.1-py3-none-any.whl", hash = "sha256:9e56f17539296baab7beabb08b92f6ee3d7be92d8be72d763360677c2ad6580e", size = 32310, upload-time = "2026-10-07T12:13:00.102Z" },
 ]
 
 [[package]]

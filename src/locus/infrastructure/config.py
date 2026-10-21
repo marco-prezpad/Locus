@@ -34,6 +34,22 @@ class AppConfig(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
 
+class BinanceProviderConfig(BaseSettings):
+    """Binance public REST API settings."""
+
+    base_url: str = "https://api.binance.com"
+    max_bars_per_request: int = 1000
+    requests_per_minute: int = 1000
+    timeout_seconds: int = 30
+    max_retries: int = 5
+
+
+class ProvidersConfig(BaseSettings):
+    """Per-venue provider settings."""
+
+    binance: BinanceProviderConfig = Field(default_factory=BinanceProviderConfig)
+
+
 class DataConfig(BaseSettings):
     """Filesystem locations and storage options for market data."""
 
@@ -41,6 +57,7 @@ class DataConfig(BaseSettings):
     interim_dir: Path = Path("data/interim")
     processed_dir: Path = Path("data/processed")
     parquet_compression: str = "snappy"
+    providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
 
 
 class ModelConfig(BaseSettings):

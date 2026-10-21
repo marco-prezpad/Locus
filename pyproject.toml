@@ -15,6 +15,7 @@ dev = [
     "pyright>=1.1.390",
     "pytest>=8.3",
     "pytest-cov>=6.0",
+    "pytest-httpx>=0.32",
     "pre-commit>=4.0",
 ]
 data = [
@@ -23,6 +24,8 @@ data = [
     "polars>=1.12",
     "pyarrow>=18.0",
     "scipy>=1.14",
+    "httpx>=0.27",
+    "tenacity>=9.0",
 ]
 ml = [
     "scikit-learn>=1.5",
@@ -85,10 +88,10 @@ exclude = ["**/__pycache__", "**/.pytest_cache", "**/.venv"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-addopts = "-v --strict-markers --cov=locus --cov-report=term-missing"
+addopts = "-v --strict-markers -m 'not integration' --cov=locus --cov-report=term-missing"
 markers = [
     "unit: unit tests",
-    "integration: integration tests",
+    "integration: integration tests (real APIs, network required)",
     "backtest: backtest tests",
 ]
 
