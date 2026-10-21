@@ -45,7 +45,8 @@ def run_baselines(
 
 def comparison_table(results: dict[str, EvaluationResult]) -> pl.DataFrame:
     """Build a wide DataFrame with one row per strategy and the main
-    metrics as columns, sorted by Sharpe descending."""
+    metrics as columns, sorted by Sharpe descending. Returns an empty
+    DataFrame with the expected schema if `results` is empty."""
     rows = []
     for name, r in results.items():
         m = r.metrics
@@ -62,6 +63,22 @@ def comparison_table(results: dict[str, EvaluationResult]) -> pl.DataFrame:
                 "calmar": m.calmar,
                 "hit_rate": m.hit_rate,
                 "turnover": m.turnover,
+            }
+        )
+    if not rows:
+        return pl.DataFrame(
+            schema={
+                "strategy": pl.Utf8,
+                "n_periods": pl.Int64,
+                "total_return": pl.Float64,
+                "cagr": pl.Float64,
+                "volatility": pl.Float64,
+                "sharpe": pl.Float64,
+                "sortino": pl.Float64,
+                "max_drawdown": pl.Float64,
+                "calmar": pl.Float64,
+                "hit_rate": pl.Float64,
+                "turnover": pl.Float64,
             }
         )
     return pl.DataFrame(rows).sort("sharpe", descending=True)
