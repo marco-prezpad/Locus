@@ -7,9 +7,9 @@ limitations.
 
 The **semantic** side of FX (settlement vs reporting, numeraire,
 conversion rules, multi-currency accounting) is documented in
-`docs/currency.md`, which lands in F2.B.2. This document covers the
-data layer only: where rates come from, how they are stored, and how
-they are rate-limited.
+`docs/currency.md`. This document covers the data layer only: where
+rates come from, how they are stored, and how they are rate-limited.
+The FX layer is fully closed as of F2.B.2.
 
 ## 1. Sources
 
@@ -247,7 +247,37 @@ Per-asset failures are captured in the report, not raised: a single delisted or 
 
 ### FX Ingestion
 
-`FxRateIngestor` (F2.B.2) will expose `run_batch(start, end)` and `run_incremental(lookback_days=7)`. Both are invoked manually or by an external cron (OS scheduler or GitHub Actions). Neither auto-triggers. A built-in scheduler is out of scope for the MVP and belongs to B6/B10.
+`FxRateIngestor` exposes two methods:
+
+- **`run_batch(start, end)`**: downloads the full range for every pair,
+  ignoring the cache. Used once at setup and for full refreshes.
+- **`run_incremental(lookback_days=7)`**: fetches the last N days per
+  pair, **skipping pairs whose store already has a rate for the
+  current UTC day** (from any source). This makes daily runs
+  idempotent: re-running on the same day returns `skipped` for
+  everything and does not call any provider.
+
+Both are invoked **manually or by an external cron** (OS scheduler or
+GitHub Actions). Neither auto-triggers. Recommended cadence: once per
+day at 01:00 UTC, after Kraken's daily close and Frankfurter's daily
+update. A built-in scheduler is out of scope for the MVP and belongs to
+B6/B10.
+
+Per-pair outcomes are captured in `FxIngestionReport` as
+`FxPairIngestionResult`:
+
+- `written`: rows written to the store.
+- `skipped`: the pair was up to date (no provider called).
+- `reason`: error message or `"empty"` when a provider returned no
+  data for the requested range.
+
+The ingestor never aborts the batch on a per-pair failure: the
+remaining pairs proceed and the report lists which failed and why.
+
+The `FxConverter` (in `src/locus/data/fx/converter.py`) consumes the
+store to convert amounts between currencies. Its semantics
+(staleness, routing, audit trail) are documented in
+`docs/currency.md`, not here.
 
 ---
 
@@ -324,9 +354,17 @@ The distinction matters: `rows_written == 0` with no error is a valid outcome (a
 
 ### FX
 
-- `scripts/smoke_f2b1.py`: Fetches EUR/USD from Frankfurter and USDT/USD from Kraken and CoinGecko, writes all three to the FX store, then prints the available sources per pair and the CoinGecko quota status. Skips CoinGecko if the API key is not configured.
-
-None of the smoke scripts are collected by pytest because they live under `scripts/`, not `tests/`.
+- **`scripts/smoke_f2b1.py`**: fetches EUR/USD from Frankfurter and
+  USDT/USD from Kraken and CoinGecko, writes all three to the FX
+  store, then prints the available sources per pair and the
+  CoinGecko quota status. Skips CoinGecko if the API key is not
+  configured.
+- **`scripts/smoke_f2b2.py`**: runs `run_incremental(lookback_days=7)`,
+  prints per-pair outcomes (`written` / `skipped` / `failed`), then
+  executes four conversions with `FxConverter.convert_with_details`
+  (`EUR→USDT`, `USDT→EUR`, `EUR→USD`, `USDT→USD`). Verifies that
+  two-hop conversions route correctly, that source per pair is
+  logged, and that the incremental cache skip works on re-runs.
 
 ---
 

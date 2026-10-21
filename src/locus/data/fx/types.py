@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import ClassVar
 
 
 class FxError(Exception):
@@ -46,16 +47,20 @@ class FxPair:
     def name(self) -> str:
         return f"{self.base}{self.quote}"
 
+    _KNOWN_4CHAR_BASES: ClassVar[frozenset[str]] = frozenset({"USDT"})
+
     @classmethod
     def parse(cls, name: str) -> FxPair:
-        """Parse 'EURUSD' into FxPair('EUR', 'USD').
+        """Parse 'EURUSD' -> FxPair('EUR', 'USD').
 
-        Convention: base is the first 3 characters, quote is the rest.
-        Sufficient for the MVP pairs (EURUSD, USDTUSD); a general
-        currency registry would be needed for arbitrary pairs.
+        Convention: 3-character base by default. 4-character bases
+        (USDT) are recognized from a small allowlist, because the
+        generic parse would split 'USDTUSD' as 'US' + 'TUSD'.
         """
         if len(name) < 4:
             raise ValueError(f"invalid pair name: {name!r}")
+        if name[:4] in cls._KNOWN_4CHAR_BASES and len(name) > 4:
+            return cls(base=name[:4], quote=name[4:])
         return cls(base=name[:3], quote=name[3:])
 
 
