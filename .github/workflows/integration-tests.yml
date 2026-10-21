@@ -30,7 +30,7 @@ jobs:
         run: uv sync --frozen --extra dev,data
 
       - name: Run integration tests
-        run: uv run pytest -m integration tests/integration/ -v --no-cov
+        run: uv run pytest -m integration tests/integration/ -v --no-cov -rs
         env:
           # Optional: only needed if any FX integration test requires
           # CoinGecko. Empty secret is fine; those tests skip.
