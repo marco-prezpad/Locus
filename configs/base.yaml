@@ -8,6 +8,10 @@ data:
   interim_dir: "data/interim"
   processed_dir: "data/processed"
   parquet_compression: "snappy"
+  universe:
+    discovery_source: "binance"
+    min_history_days: 30
+    default_venues: ["binance"]
   providers:
     binance:
       base_url: "https://api.binance.com"

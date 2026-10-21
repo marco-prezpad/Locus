@@ -70,6 +70,14 @@ class ProvidersConfig(BaseSettings):
     coingecko: CoinGeckoProviderConfig = Field(default_factory=CoinGeckoProviderConfig)
 
 
+class UniverseConfig(BaseSettings):
+    """Universe reconstruction parameters."""
+
+    discovery_source: str = "binance"
+    min_history_days: int = 30
+    default_venues: list[str] = Field(default_factory=lambda: ["binance"])
+
+
 class DataConfig(BaseSettings):
     """Filesystem locations and storage options for market data."""
 
@@ -78,6 +86,7 @@ class DataConfig(BaseSettings):
     processed_dir: Path = Path("data/processed")
     parquet_compression: str = "snappy"
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
+    universe: UniverseConfig = Field(default_factory=UniverseConfig)
 
 
 class ModelConfig(BaseSettings):
