@@ -43,6 +43,20 @@ data:
     source_preferences:
       EURUSD: ["frankfurter"]
       USDTUSD: ["kraken", "coingecko"]
+  features:
+    active:
+      - {name: return_1, family: return, params: {n: 1}}
+      - {name: return_3, family: return, params: {n: 3}}
+      - {name: return_5, family: return, params: {n: 5}}
+      - {name: return_20, family: return, params: {n: 20}}
+      - {name: return_50, family: return, params: {n: 50}}
+      - {name: log_return_1, family: log_return, params: {n: 1}}
+      - {name: log_return_5, family: log_return, params: {n: 5}}
+      - {name: log_return_20, family: log_return, params: {n: 20}}
+      - {name: ma_distance_20, family: ma_distance, params: {window: 20}}
+      - {name: ma_distance_50, family: ma_distance, params: {window: 50}}
+      - {name: rolling_vol_5, family: rolling_volatility, params: {window: 5}}
+      - {name: rolling_vol_20, family: rolling_volatility, params: {window: 20}}
 
 model:
   default_horizon_hours: 24

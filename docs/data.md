@@ -400,3 +400,29 @@ To add a pair (e.g., GBPUSD):
 4. Document its sources and limitations here.
 
 The `FxPair.parse()` helper assumes a 3-character base and a quote of the remainder (`EURUSD` → `EUR/USD`, `USDTUSD` → `USDT/USD`). A general currency registry is needed for pairs like `BTCUSDT` (4-char base) if they ever enter FX scope; for the MVP, all pairs fit the 3-char-base convention.
+
+---
+
+## 12. Downstream: Feature Layer
+
+Feature engineering (F3) consumes OHLCV bars from this layer and
+produces a feature dataset. The feature layer does not modify or
+persist OHLCV; it reads from `ParquetBarStore` and returns a DataFrame
+with the canonical `BAR_SCHEMA` columns plus one column per feature.
+
+Feature definitions, formulas, families, leakage guarantees, and the
+config-driven registry are documented in **`docs/features.md`**. The
+feature pipeline assumes:
+
+- Bars are sorted by `(asset_id, timestamp)` and free of duplicates
+  (guaranteed by `validate_ohlcv`).
+- Timestamps are timezone-aware UTC.
+- The DataFrame has exactly `BAR_SCHEMA` columns before features are
+  applied.
+
+Features are backward-looking by contract: at row `t`, a feature's
+value depends only on data at timestamps `<= t` within the same asset.
+This is enforced by `tests/unit/features/test_leakage.py`. Any change
+to this layer that breaks the sort, dedup, or UTC guarantees will
+silently invalidate the leakage tests; if you add a provider that
+violates any of them, extend `validate_ohlcv` before shipping.
