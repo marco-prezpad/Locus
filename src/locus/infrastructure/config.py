@@ -78,6 +78,19 @@ class UniverseConfig(BaseSettings):
     default_venues: list[str] = Field(default_factory=lambda: ["binance"])
 
 
+class FxConfig(BaseSettings):
+    """FX conversion configuration: pairs, numeraire, staleness, CoinGecko quota."""
+
+    pairs: list[str] = Field(default_factory=lambda: ["EURUSD", "USDTUSD"])
+    numeraire: str = "USDT"
+    reporting_currency: str = "EUR"
+    stale_days_threshold: int = 7
+    coingecko_api_key: str = ""
+    coingecko_max_per_minute: int = 100
+    coingecko_max_per_month: int = 10_000
+    coingecko_warn_threshold: int = 9_500
+
+
 class DataConfig(BaseSettings):
     """Filesystem locations and storage options for market data."""
 
@@ -87,6 +100,7 @@ class DataConfig(BaseSettings):
     parquet_compression: str = "snappy"
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     universe: UniverseConfig = Field(default_factory=UniverseConfig)
+    fx: FxConfig = Field(default_factory=FxConfig)
 
 
 class ModelConfig(BaseSettings):

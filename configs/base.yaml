@@ -8,10 +8,6 @@ data:
   interim_dir: "data/interim"
   processed_dir: "data/processed"
   parquet_compression: "snappy"
-  universe:
-    discovery_source: "binance"
-    min_history_days: 30
-    default_venues: ["binance"]
   providers:
     binance:
       base_url: "https://api.binance.com"
@@ -29,6 +25,21 @@ data:
       timeout_seconds: 30
       max_retries: 3
       default_vs_currency: "usd"
+  universe:
+    discovery_source: "binance"
+    min_history_days: 30
+    default_venues: ["binance"]
+  fx:
+    pairs:
+      - "EURUSD"
+      - "USDTUSD"
+    numeraire: "USDT"
+    reporting_currency: "EUR"
+    stale_days_threshold: 7
+    coingecko_api_key: ""
+    coingecko_max_per_minute: 100
+    coingecko_max_per_month: 10000
+    coingecko_warn_threshold: 9500
 
 model:
   default_horizon_hours: 24
