@@ -56,7 +56,6 @@ def _df(n: int = 2) -> pl.DataFrame:
 def _request() -> BarRequest:
     return BarRequest(
         asset_id="BTC",
-        symbol="BTCUSDT",
         timeframe=Timeframe.H1,
         start=datetime(2026, 1, 1, tzinfo=UTC),
         end=datetime(2026, 1, 2, tzinfo=UTC),

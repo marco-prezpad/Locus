@@ -50,7 +50,6 @@ def _provider(httpx_mock: HTTPXMock) -> BinanceMarketDataProvider:
 def _request() -> BarRequest:
     return BarRequest(
         asset_id="BTC",
-        symbol="BTCUSDT",
         timeframe=Timeframe.H1,
         start=datetime(2026, 1, 1, tzinfo=UTC),
         end=datetime(2026, 1, 1, 2, tzinfo=UTC),
@@ -103,7 +102,6 @@ def test_unsupported_timeframe_raises(httpx_mock: HTTPXMock) -> None:
     provider = _provider(httpx_mock)
     bad = BarRequest(
         asset_id="BTC",
-        symbol="BTCUSDT",
         timeframe="2h",  # type: ignore[arg-type]
         start=datetime(2026, 1, 1, tzinfo=UTC),
         end=datetime(2026, 1, 2, tzinfo=UTC),

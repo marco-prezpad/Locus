@@ -46,16 +46,13 @@ class ProviderNoDataError(ProviderError):
 
 @dataclass(frozen=True, slots=True)
 class BarRequest:
-    """A request for OHLCV bars to a specific provider.
+    """A request for OHLCV bars.
 
-    `asset_id` is the canonical identifier (e.g. "BTC"). `symbol` is the
-    provider-specific ticker (e.g. "BTCUSDT" for Binance). The caller is
-    responsible for supplying both; a SymbolMapper will be added in a
-    later sub-phase to translate between them automatically.
+    `asset_id` is the canonical identifier (e.g. "BTC"). Each provider
+    translates it to its own venue-specific symbol via `SymbolMapper`.
     """
 
     asset_id: str
-    symbol: str
     timeframe: Timeframe
     start: datetime
     end: datetime
@@ -63,8 +60,6 @@ class BarRequest:
     def __post_init__(self) -> None:
         if not self.asset_id:
             raise ValueError("asset_id must be non-empty")
-        if not self.symbol:
-            raise ValueError("symbol must be non-empty")
         if self.start.tzinfo is None or self.end.tzinfo is None:
             raise ValueError("start and end must be timezone-aware")
         if self.end <= self.start:

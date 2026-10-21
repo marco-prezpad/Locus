@@ -34,6 +34,24 @@ class AppConfig(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
 
+class KrakenProviderConfig(BaseSettings):
+    """Kraken public REST API settings."""
+
+    base_url: str = "https://api.kraken.com"
+    max_bars_per_request: int = 720
+    timeout_seconds: int = 30
+    max_retries: int = 5
+
+
+class CoinGeckoProviderConfig(BaseSettings):
+    """CoinGecko public API settings (last-resort fallback)."""
+
+    base_url: str = "https://api.coingecko.com/api/v3"
+    timeout_seconds: int = 30
+    max_retries: int = 3
+    default_vs_currency: str = "usd"
+
+
 class BinanceProviderConfig(BaseSettings):
     """Binance public REST API settings."""
 
@@ -48,6 +66,8 @@ class ProvidersConfig(BaseSettings):
     """Per-venue provider settings."""
 
     binance: BinanceProviderConfig = Field(default_factory=BinanceProviderConfig)
+    kraken: KrakenProviderConfig = Field(default_factory=KrakenProviderConfig)
+    coingecko: CoinGeckoProviderConfig = Field(default_factory=CoinGeckoProviderConfig)
 
 
 class DataConfig(BaseSettings):

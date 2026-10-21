@@ -22,6 +22,7 @@ from tenacity import (
 )
 
 from locus.data.providers.base import BAR_SCHEMA
+from locus.data.symbols import SymbolMapper
 from locus.data.types import (
     BarRequest,
     ProviderNoDataError,
@@ -85,7 +86,7 @@ class BinanceMarketDataProvider:
 
         while cursor < request.end:
             batch = self._fetch_batch(
-                symbol=request.symbol,
+                symbol=SymbolMapper.to_symbol(request.asset_id, self.venue),
                 interval=interval,
                 start=cursor,
                 end=request.end,
