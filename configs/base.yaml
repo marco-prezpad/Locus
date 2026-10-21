@@ -45,6 +45,7 @@ data:
       USDTUSD: ["kraken", "coingecko"]
   features:
     active:
+      # --- Per-asset: returns ---
       - {name: return_1, family: return, params: {n: 1}}
       - {name: return_3, family: return, params: {n: 3}}
       - {name: return_5, family: return, params: {n: 5}}
@@ -53,10 +54,24 @@ data:
       - {name: log_return_1, family: log_return, params: {n: 1}}
       - {name: log_return_5, family: log_return, params: {n: 5}}
       - {name: log_return_20, family: log_return, params: {n: 20}}
+      # --- Per-asset: trend ---
       - {name: ma_distance_20, family: ma_distance, params: {window: 20}}
       - {name: ma_distance_50, family: ma_distance, params: {window: 50}}
+      - {name: ema_distance_20, family: ema_distance, params: {window: 20}}
+      - {name: ema_distance_50, family: ema_distance, params: {window: 50}}
+      # --- Per-asset: volatility ---
       - {name: rolling_vol_5, family: rolling_volatility, params: {window: 5}}
       - {name: rolling_vol_20, family: rolling_volatility, params: {window: 20}}
+      - {name: atr_pct_14, family: atr_percent, params: {window: 14}}
+      - {name: vol_ratio_5_20, family: volatility_ratio, params: {short_window: 5, long_window: 20}}
+      # --- Per-asset: volume ---
+      - {name: volume_zscore_20, family: volume_zscore, params: {window: 20}}
+      - {name: relative_volume_20, family: relative_volume, params: {window: 20}}
+      # --- Cross-sectional (source must appear above) ---
+      - {name: xs_percentile_return_20, family: xs_percentile_rank, params: {source: return_20}}
+      - {name: xs_zscore_return_20, family: xs_zscore, params: {source: return_20}}
+      - {name: xs_percentile_ma_distance_20, family: xs_percentile_rank, params: {source: ma_distance_20}}
+      - {name: rel_momentum_vs_market_20, family: relative_momentum, params: {source: return_20}}
 
 model:
   default_horizon_hours: 24
