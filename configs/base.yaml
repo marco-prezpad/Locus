@@ -72,6 +72,22 @@ data:
       - {name: xs_zscore_return_20, family: xs_zscore, params: {source: return_20}}
       - {name: xs_percentile_ma_distance_20, family: xs_percentile_rank, params: {source: ma_distance_20}}
       - {name: rel_momentum_vs_market_20, family: relative_momentum, params: {source: return_20}}
+  labels:
+    horizons_bars:
+      - {name: future_return_1h, bars: 1}
+      - {name: future_return_4h, bars: 4}
+      - {name: future_return_24h, bars: 24}
+    probability_positive_label: future_return_24h
+    primary_label: future_return_24h
+  splits:
+    mode: temporal
+    temporal:
+      train_ratio: 0.70
+      val_ratio: 0.15
+    walk_forward:
+      n_splits: 5
+      horizon_bars: 24
+      lookback_bars: 50
 
 model:
   default_horizon_hours: 24

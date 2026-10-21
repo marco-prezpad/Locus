@@ -426,3 +426,16 @@ This is enforced by `tests/unit/features/test_leakage.py`. Any change
 to this layer that breaks the sort, dedup, or UTC guarantees will
 silently invalidate the leakage tests; if you add a provider that
 violates any of them, extend `validate_ohlcv` before shipping.
+
+
+## 13. Downstream: Dataset Layer
+
+Feature engineering (F3) and dataset assembly (F4) consume OHLCV bars
+from this layer but do not modify them. The dataset layer builds
+labels, temporal splits, purge gaps, and uniqueness weights; its
+contract and semantics are documented in **`docs/datasets.md`**.
+
+The dataset layer inherits all guarantees from this one: sorted bars,
+no duplicates, UTC timestamps. If you add a provider that violates any
+of them, extend `validate_ohlcv` before shipping, or the splitter and
+label builder will produce silently wrong results.
