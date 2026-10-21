@@ -112,6 +112,44 @@ class FeaturesConfig(BaseSettings):
     active: list[FeatureSpecConfig] = Field(default_factory=list)
 
 
+class LabelSpecConfig(BaseSettings):
+    """One label specification from config."""
+
+    name: str
+    bars: int
+
+
+class LabelsConfig(BaseSettings):
+    """Active label set and the primary label used by models/backtester."""
+
+    horizons_bars: list[LabelSpecConfig] = Field(default_factory=list)
+    probability_positive_label: str = "future_return_24h"
+    primary_label: str = "future_return_24h"
+
+
+class TemporalSplitConfig(BaseSettings):
+    """Single temporal split ratios (train/val/test)."""
+
+    train_ratio: float = 0.70
+    val_ratio: float = 0.15
+
+
+class WalkForwardSplitConfig(BaseSettings):
+    """Walk-forward split parameters."""
+
+    n_splits: int = 5
+    horizon_bars: int = 24
+    lookback_bars: int = 50
+
+
+class SplitsConfig(BaseSettings):
+    """Split strategy: 'temporal' (single split) or 'walk_forward' (K folds)."""
+
+    mode: Literal["temporal", "walk_forward"] = "temporal"
+    temporal: TemporalSplitConfig = Field(default_factory=TemporalSplitConfig)
+    walk_forward: WalkForwardSplitConfig = Field(default_factory=WalkForwardSplitConfig)
+
+
 class DataConfig(BaseSettings):
     """Filesystem locations and storage options for market data."""
 
@@ -123,6 +161,8 @@ class DataConfig(BaseSettings):
     universe: UniverseConfig = Field(default_factory=UniverseConfig)
     fx: FxConfig = Field(default_factory=FxConfig)
     features: FeaturesConfig = Field(default_factory=FeaturesConfig)
+    labels: LabelsConfig = Field(default_factory=LabelsConfig)
+    splits: SplitsConfig = Field(default_factory=SplitsConfig)
 
 
 class ModelConfig(BaseSettings):
