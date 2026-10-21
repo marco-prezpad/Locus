@@ -74,7 +74,10 @@ class MarketDataIngestor:
                 timeframe=request.timeframe.value,
             )
 
-        df = df.with_columns(pl.lit(request.asset_id).alias("asset_id"))
+        df = df.with_columns(
+            pl.lit(request.asset_id).alias("asset_id"),
+            pl.lit(request.timeframe.value).alias("timeframe"),
+        )
         df = validate_ohlcv(df)
         written = self._store.write(df)
 

@@ -15,6 +15,16 @@ data:
       requests_per_minute: 1000
       timeout_seconds: 30
       max_retries: 5
+    kraken:
+      base_url: "https://api.kraken.com"
+      max_bars_per_request: 720
+      timeout_seconds: 30
+      max_retries: 5
+    coingecko:
+      base_url: "https://api.coingecko.com/api/v3"
+      timeout_seconds: 30
+      max_retries: 3
+      default_vs_currency: "usd"
 
 model:
   default_horizon_hours: 24
