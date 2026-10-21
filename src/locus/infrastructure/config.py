@@ -89,6 +89,12 @@ class FxConfig(BaseSettings):
     coingecko_max_per_minute: int = 100
     coingecko_max_per_month: int = 10_000
     coingecko_warn_threshold: int = 9_500
+    source_preferences: dict[str, list[str]] = Field(
+        default_factory=lambda: {
+            "EURUSD": ["frankfurter"],
+            "USDTUSD": ["kraken", "coingecko"],
+        }
+    )
 
 
 class DataConfig(BaseSettings):

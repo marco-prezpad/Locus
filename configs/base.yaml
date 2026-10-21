@@ -40,6 +40,9 @@ data:
     coingecko_max_per_minute: 100
     coingecko_max_per_month: 10000
     coingecko_warn_threshold: 9500
+    source_preferences:
+      EURUSD: ["frankfurter"]
+      USDTUSD: ["kraken", "coingecko"]
 
 model:
   default_horizon_hours: 24

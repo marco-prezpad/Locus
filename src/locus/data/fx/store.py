@@ -105,3 +105,14 @@ class FxRateStore:
             for d in pair_dir.iterdir()
             if d.is_dir() and d.name.startswith("source=")
         )
+
+    def available_pairs(self) -> list[str]:
+        """List pairs that have at least one stored rate."""
+        fx_root = self._root / "fx"
+        if not fx_root.exists():
+            return []
+        return sorted(
+            d.name.removeprefix("pair=")
+            for d in fx_root.iterdir()
+            if d.is_dir() and d.name.startswith("pair=")
+        )
