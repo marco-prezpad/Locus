@@ -97,6 +97,21 @@ class FxConfig(BaseSettings):
     )
 
 
+class FeatureSpecConfig(BaseSettings):
+    """One feature specification from config."""
+
+    name: str
+    family: str
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class FeaturesConfig(BaseSettings):
+    """Active feature set. Order matters only for logging; the pipeline
+    enforces name uniqueness."""
+
+    active: list[FeatureSpecConfig] = Field(default_factory=list)
+
+
 class DataConfig(BaseSettings):
     """Filesystem locations and storage options for market data."""
 
@@ -107,6 +122,7 @@ class DataConfig(BaseSettings):
     providers: ProvidersConfig = Field(default_factory=ProvidersConfig)
     universe: UniverseConfig = Field(default_factory=UniverseConfig)
     fx: FxConfig = Field(default_factory=FxConfig)
+    features: FeaturesConfig = Field(default_factory=FeaturesConfig)
 
 
 class ModelConfig(BaseSettings):
