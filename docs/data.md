@@ -439,3 +439,19 @@ The dataset layer inherits all guarantees from this one: sorted bars,
 no duplicates, UTC timestamps. If you add a provider that violates any
 of them, extend `validate_ohlcv` before shipping, or the splitter and
 label builder will produce silently wrong results.
+
+
+## 14. Downstream: Backtest Layer
+
+The event-driven backtester (F6) consumes OHLCV bars from this layer
+plus the `sigma_daily` and `daily_volume_quote` per-bar estimates from
+`backtest/market_state.py` (rolling, backward-looking). It does not
+modify the data; it computes fills, costs, and equity curves.
+
+Execution model, capital-aware constraints, cost scenarios, and the
+`CapitalScalingExperiment` are documented in **`docs/backtest.md`**.
+The backtester inherits all guarantees from this layer: sorted bars,
+no duplicates, UTC timestamps, no nulls in required columns. Any
+change that breaks them (new provider, validation relaxation)
+invalidates the backtest results silently; extend `validate_ohlcv`
+before shipping.
