@@ -45,40 +45,35 @@ data:
       USDTUSD: ["kraken", "coingecko"]
   features:
     active:
-      # --- Per-asset: returns ---
+      # Short-horizon context
       - {name: return_1, family: return, params: {n: 1}}
-      - {name: return_3, family: return, params: {n: 3}}
-      - {name: return_5, family: return, params: {n: 5}}
-      - {name: return_20, family: return, params: {n: 20}}
-      - {name: return_50, family: return, params: {n: 50}}
-      - {name: log_return_1, family: log_return, params: {n: 1}}
-      - {name: log_return_5, family: log_return, params: {n: 5}}
-      - {name: log_return_20, family: log_return, params: {n: 20}}
-      # --- Per-asset: trend ---
-      - {name: ma_distance_20, family: ma_distance, params: {window: 20}}
-      - {name: ma_distance_50, family: ma_distance, params: {window: 50}}
-      - {name: ema_distance_20, family: ema_distance, params: {window: 20}}
-      - {name: ema_distance_50, family: ema_distance, params: {window: 50}}
-      # --- Per-asset: volatility ---
-      - {name: rolling_vol_5, family: rolling_volatility, params: {window: 5}}
-      - {name: rolling_vol_20, family: rolling_volatility, params: {window: 20}}
-      - {name: atr_pct_14, family: atr_percent, params: {window: 14}}
-      - {name: vol_ratio_5_20, family: volatility_ratio, params: {short_window: 5, long_window: 20}}
-      # --- Per-asset: volume ---
-      - {name: volume_zscore_20, family: volume_zscore, params: {window: 20}}
-      - {name: relative_volume_20, family: relative_volume, params: {window: 20}}
-      # --- Cross-sectional (source must appear above) ---
-      - {name: xs_percentile_return_20, family: xs_percentile_rank, params: {source: return_20}}
-      - {name: xs_zscore_return_20, family: xs_zscore, params: {source: return_20}}
-      - {name: xs_percentile_ma_distance_20, family: xs_percentile_rank, params: {source: ma_distance_20}}
-      - {name: rel_momentum_vs_market_20, family: relative_momentum, params: {source: return_20}}
+      - {name: return_24, family: return, params: {n: 24}}
+      # Weekly horizon returns
+      - {name: return_168, family: return, params: {n: 168}}
+      - {name: return_336, family: return, params: {n: 336}}
+      - {name: log_return_168, family: log_return, params: {n: 168}}
+      # Trend at weekly scale
+      - {name: ma_distance_168, family: ma_distance, params: {window: 168}}
+      - {name: ma_distance_336, family: ma_distance, params: {window: 336}}
+      - {name: ema_distance_168, family: ema_distance, params: {window: 168}}
+      # Volatility at weekly scale
+      - {name: rolling_vol_168, family: rolling_volatility, params: {window: 168}}
+      - {name: atr_pct_168, family: atr_percent, params: {window: 168}}
+      - {name: vol_ratio_24_168, family: volatility_ratio, params: {short_window: 24, long_window: 168}}
+      # Volume at weekly scale
+      - {name: volume_zscore_168, family: volume_zscore, params: {window: 168}}
+      - {name: relative_volume_168, family: relative_volume, params: {window: 168}}
+      # Cross-sectional at weekly horizon
+      - {name: xs_percentile_return_168, family: xs_percentile_rank, params: {source: return_168}}
+      - {name: xs_zscore_return_168, family: xs_zscore, params: {source: return_168}}
+      - {name: rel_momentum_vs_market_168, family: relative_momentum, params: {source: return_168}}
   labels:
     horizons_bars:
-      - {name: future_return_1h, bars: 1}
-      - {name: future_return_4h, bars: 4}
-      - {name: future_return_24h, bars: 24}
-    probability_positive_label: future_return_24h
-    primary_label: future_return_24h
+      - {name: future_return_1d, bars: 24}
+      - {name: future_return_1w, bars: 168}
+      - {name: future_return_2w, bars: 336}
+    probability_positive_label: future_return_1w
+    primary_label: future_return_1w
   splits:
     mode: temporal
     temporal:
@@ -86,8 +81,9 @@ data:
       val_ratio: 0.15
     walk_forward:
       n_splits: 5
-      horizon_bars: 24
-      lookback_bars: 50
+      horizon_bars: 168
+      lookback_bars: 168
+      rebalance_freq_bars: 168
 
 model:
   default_horizon_hours: 24

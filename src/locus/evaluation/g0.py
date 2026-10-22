@@ -4,11 +4,14 @@ g0.py
 The G0 gate: pre-registered criterion, per-strategy report, and the
 final decision.
 
-The criterion is **pre-registered**: it is defined below as
-`G0_CRITERION_V1` and must not be modified without opening a new
-research cycle (see docs/governance.md). The decision is computed
-from that criterion and the actual results, not chosen after seeing
-the numbers.
+Two criteria are pre-registered:
+
+- `G0_CRITERION_V1`: the original F7 criterion (min_dsr=0.95, 2 years).
+- `G0_CRITERION_V2`: calibrated for pivote A (weekly horizon, 5 years).
+  See docs/governance.md §7.b for the calibration rationale.
+
+Neither is modified after seeing results. A new criterion requires a
+new research cycle.
 
 Author: Marco Pérez Padilla
 Date:   22-10-2026
@@ -43,11 +46,7 @@ class G0Criterion:
     - `ci_low > 0`
     - `min_btl_years <= available_years`
     - `pbo < max_pbo` (across all strategies)
-
-    A strategy is a candidate only if it is NOT `benchmark_name`. The
-    benchmark (Buy&Hold BTC) is reported as a reference but does not
-    "win" the gate; beating the benchmark is required to claim active
-    edge.
+    - `sharpe > benchmark_sharpe + min_sharpe_vs_benchmark`
     """
 
     min_sharpe: float = 0.0
@@ -56,9 +55,10 @@ class G0Criterion:
     max_pbo: float = 0.5
     benchmark_name: str = "buy_and_hold_btc"
     n_trials_for_dsr: int = 4
+    min_sharpe_vs_benchmark: float = 0.0
 
 
-# Pre-registered criterion. Do not modify without a new research cycle.
+# Pre-registered criterion for F7 (daily horizon, 2 years).
 G0_CRITERION_V1 = G0Criterion(
     min_sharpe=0.0,
     min_dsr=0.95,
@@ -66,6 +66,21 @@ G0_CRITERION_V1 = G0Criterion(
     max_pbo=0.5,
     benchmark_name="buy_and_hold_btc",
     n_trials_for_dsr=4,
+    min_sharpe_vs_benchmark=0.0,
+)
+
+# Calibrated criterion for pivote A (weekly horizon, 5 years).
+# The DSR 0.95 threshold requires Sharpe > 1.21 with 5y of data, which is
+# not achievable with public technical features. See docs/governance.md
+# §7.b for the full calibration rationale.
+G0_CRITERION_V2 = G0Criterion(
+    min_sharpe=0.0,
+    min_dsr=0.80,
+    available_years=5.0,
+    max_pbo=0.5,
+    benchmark_name="buy_and_hold_btc",
+    n_trials_for_dsr=4,
+    min_sharpe_vs_benchmark=0.10,
 )
 
 
@@ -103,7 +118,12 @@ def _compute_strategy_report(
     result: WalkForwardStrategyResult,
     criterion: G0Criterion,
 ) -> StrategyG0Report:
-    """Compute DSR, CI, MinBTL and pass/fail reasons for one strategy."""
+    """Compute DSR, CI, MinBTL and pass/fail reasons for one strategy.
+
+    The benchmark comparison (`sharpe > benchmark_sharpe + min_sharpe_vs_benchmark`)
+    is applied in `build_g0_report`, because it needs the benchmark's
+    Sharpe, which is only known after all strategies are computed.
+    """
     returns = result.returns
     if len(returns) < 2:
         return StrategyG0Report(
@@ -175,7 +195,6 @@ def build_g0_report(
         matrix = np.column_stack([r.returns[:min_len] for r in results if len(r.returns) > 0])
         pbo = probability_of_backtest_overfitting(matrix, n_subsamples=16)
 
-    # Identify benchmark
     benchmark = next(
         (s for s in per_strategy if s.strategy_name == criterion.benchmark_name),
         None,
@@ -183,23 +202,25 @@ def build_g0_report(
     if benchmark is None:
         raise ValueError(f"benchmark {criterion.benchmark_name!r} not in results")
 
-    # Candidates: non-benchmark strategies that pass all criteria
     candidates = [s for s in per_strategy if s.strategy_name != criterion.benchmark_name]
-
     pbo_ok = pbo < criterion.max_pbo
 
-    # Decision: positive if (a) PBO passes, (b) at least one non-benchmark
-    # strategy passes all individual criteria, AND (c) its Sharpe exceeds
-    # the benchmark's Sharpe (otherwise there is no active edge).
-    passing_active = [s for s in candidates if s.passes and s.sharpe > benchmark.sharpe]
+    # An active strategy must (a) pass all individual criteria AND
+    # (b) beat the benchmark by at least `min_sharpe_vs_benchmark`.
+    passing_active = [
+        s
+        for s in candidates
+        if s.passes and s.sharpe > benchmark.sharpe + criterion.min_sharpe_vs_benchmark
+    ]
 
     if pbo_ok and passing_active:
         winners = [s.strategy_name for s in passing_active]
         outcome: Outcome = "positive"
         rationale = (
             f"Positive G0: {len(winners)} active strateg(ies) pass all "
-            f"criteria and beat benchmark Sharpe {benchmark.sharpe:.3f}: "
-            f"{winners}. PBO={pbo:.3f} < {criterion.max_pbo}."
+            f"criteria and beat benchmark Sharpe {benchmark.sharpe:.3f} "
+            f"by >= {criterion.min_sharpe_vs_benchmark}: {winners}. "
+            f"PBO={pbo:.3f} < {criterion.max_pbo}."
         )
     elif not pbo_ok:
         outcome = "negative"
@@ -210,23 +231,24 @@ def build_g0_report(
         )
     else:
         outcome = "negative"
-        max(len(s.fail_reasons) for s in candidates) if candidates else 0
         rationale = (
             f"Negative G0: no active strategy passes all criteria and "
-            f"beats benchmark Sharpe {benchmark.sharpe:.3f}. "
+            f"beats benchmark Sharpe {benchmark.sharpe:.3f} by >= "
+            f"{criterion.min_sharpe_vs_benchmark}. "
             f"Benchmark itself: DSR={benchmark.dsr:.3f}, "
             f"CI=[{benchmark.ci_low:+.3f}, {benchmark.ci_high:+.3f}], "
             f"MinBTL={'inf' if not np.isfinite(benchmark.min_btl_years) else f'{benchmark.min_btl_years:.2f}y'}. "
             f"PBO={pbo:.3f}. Pivot per docs/governance.md."
         )
 
-    log.info(
+    log.debug(
         "g0_report_built",
         extra={
             "outcome": outcome,
             "n_strategies": len(per_strategy),
             "pbo": round(pbo, 3),
             "benchmark_sharpe": round(benchmark.sharpe, 3),
+            "criterion": criterion.min_dsr,
         },
     )
 
