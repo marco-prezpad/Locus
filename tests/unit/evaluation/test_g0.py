@@ -133,3 +133,13 @@ def test_g0_custom_criterion() -> None:
     )
     report = build_g0_report(results, criterion=permissive)
     assert report.criterion.max_pbo == 1.0
+
+
+def test_lazy_imports_work() -> None:
+    """Verify the lazy __getattr__ in evaluation/__init__ works."""
+    import locus.evaluation as ev
+
+    assert ev.G0_CRITERION_V1 is not None
+    assert ev.G0_CRITERION_V2 is not None
+    assert callable(ev.build_g0_report)
+    assert ev.WalkForwardBaselineEvaluator is not None

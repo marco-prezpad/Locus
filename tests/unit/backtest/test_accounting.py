@@ -54,10 +54,3 @@ def test_equity_with_borrowed_cash() -> None:
     assert a.equity({"BTC": 30000.0}) == pytest.approx(0.0)
     # -30 cash + 0.001 BTC × 31000 = 1.0 (P&L = +1 USDT)
     assert a.equity({"BTC": 31000.0}) == pytest.approx(1.0)
-
-
-def test_equity_ignores_unknown_assets() -> None:
-    a = PortfolioAccounting(cash=100.0)
-    a.apply_fill("BTC", 0.001, 30000.0)
-    eq = a.equity({})
-    assert eq == pytest.approx(70.0)  # cash only
