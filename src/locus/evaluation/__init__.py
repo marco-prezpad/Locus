@@ -33,6 +33,7 @@ from locus.evaluation.significance import (
 if TYPE_CHECKING:
     from locus.evaluation.g0 import (
         G0_CRITERION_V1,
+        G0_CRITERION_V2,
         G0Criterion,
         G0Report,
         StrategyG0Report,
@@ -49,6 +50,7 @@ __all__ = [
     "ExperimentRegistry",
     "FoldResult",
     "G0_CRITERION_V1",
+    "G0_CRITERION_V2",
     "G0Criterion",
     "G0Report",
     "PerformanceMetrics",
@@ -68,6 +70,7 @@ __all__ = [
 _LAZY_G0: frozenset[str] = frozenset(
     {
         "G0_CRITERION_V1",
+        "G0_CRITERION_V2",
         "G0Criterion",
         "G0Report",
         "StrategyG0Report",

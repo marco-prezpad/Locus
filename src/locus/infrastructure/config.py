@@ -140,6 +140,7 @@ class WalkForwardSplitConfig(BaseSettings):
     n_splits: int = 5
     horizon_bars: int = 24
     lookback_bars: int = 50
+    rebalance_freq_bars: int = 24
 
 
 class SplitsConfig(BaseSettings):

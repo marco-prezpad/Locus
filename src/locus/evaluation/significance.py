@@ -185,10 +185,13 @@ def minimum_backtest_length(
     target_sharpe_annualized: float,
 ) -> float:
     """Minimum backtest length (in years) needed for a given annualized
-    Sharpe to be distinguishable from the expected max under N trials.
+    Sharpe to be distinguishable from the expected maximum Sharpe under
+    N trials.
 
-    If `target_sharpe <= E[max SR_N]`, no length suffices. Returns
-    `inf` in that case.
+    Formula: MinBTL = (E[max Z_N] / SR_target)²
+
+    - Returns `inf` if SR_target <= 0 (no positive Sharpe, no significance).
+    - For SR_target > 0, always returns a finite value (may be large).
 
     Reference: Bailey et al. (2014).
     """
@@ -197,8 +200,6 @@ def minimum_backtest_length(
     if n_trials < 2:
         return (1.0 / target_sharpe_annualized) ** 2
     e_max = _expected_max_sharpe_under_null(n_trials)
-    if target_sharpe_annualized <= e_max:
-        return float("inf")
     return float((e_max / target_sharpe_annualized) ** 2)
 
 

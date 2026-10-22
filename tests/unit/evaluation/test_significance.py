@@ -133,31 +133,45 @@ def test_pbo_short_series_zero() -> None:
 
 
 def test_minbtl_higher_trials_longer() -> None:
-    # n_trials=2 → e_max ≈ 0.52. SR=1.5 above it → finite.
-    # n_trials=100 → e_max ≈ 2.53. SR=1.5 below it → inf.
     m1 = minimum_backtest_length(2, 1.5)
     m100 = minimum_backtest_length(100, 1.5)
     assert np.isfinite(m1)
-    assert m100 == float("inf")
+    assert np.isfinite(m100)
     assert m100 > m1
 
 
 def test_minbtl_higher_sharpe_shorter() -> None:
-    # Both with n_trials=2 (e_max ≈ 0.52), SR 1.0 and 2.0 are above.
-    m_low = minimum_backtest_length(2, 1.0)
-    m_high = minimum_backtest_length(2, 2.0)
+    m_low = minimum_backtest_length(4, 0.30)
+    m_high = minimum_backtest_length(4, 1.50)
     assert np.isfinite(m_low)
     assert np.isfinite(m_high)
     assert m_high < m_low
 
 
 def test_minbtl_zero_sharpe_inf() -> None:
-    assert minimum_backtest_length(10, 0.0) == float("inf")
+    assert minimum_backtest_length(4, 0.0) == float("inf")
 
 
-def test_minbtl_impossible_inf() -> None:
-    # With 1M trials, E[max SR] is large; 0.1 Sharpe can't beat it
-    assert minimum_backtest_length(1_000_000, 0.1) == float("inf")
+def test_minbtl_negative_sharpe_inf() -> None:
+    assert minimum_backtest_length(4, -0.3) == float("inf")
+
+
+def test_minbtl_finite_for_moderate_sharpe() -> None:
+    """Sharpe 0.5 with 4 trials requires a finite number of years."""
+    m = minimum_backtest_length(4, 0.5)
+    assert np.isfinite(m)
+    # (1.05 / 0.5)^2 ≈ 4.4
+    assert 3.5 < m < 5.5
+
+
+def test_minbtl_matches_formula() -> None:
+    """Exact sanity: MinBTL = (E[max Z_4] / SR)^2."""
+    from locus.evaluation.significance import _expected_max_sharpe_under_null
+
+    e_max = _expected_max_sharpe_under_null(4)
+    sr = 0.6
+    expected = (e_max / sr) ** 2
+    assert minimum_backtest_length(4, sr) == pytest.approx(expected)
 
 
 # ---------- Block bootstrap ----------
