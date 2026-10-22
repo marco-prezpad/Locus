@@ -117,11 +117,15 @@ class LoggerFactory:
     @classmethod
     def set_level(cls, level: str) -> None:
         """Change the level of the root logger and every logger already
-        created. Useful for CLI scripts that want to suppress INFO logs
-        after configuration has happened."""
+        created. If called before any `get()` has configured the layer,
+        configure with the requested level instead of the default INFO.
+        """
         numeric = getattr(logging, level.upper(), None)
         if not isinstance(numeric, int):
             raise ValueError(f"unknown log level: {level}")
+        if not cls._configured:
+            cls.configure(level)
+            return
         logging.getLogger().setLevel(numeric)
         for name in list(logging.Logger.manager.loggerDict):
             log = logging.getLogger(name)

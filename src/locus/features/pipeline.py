@@ -50,7 +50,7 @@ class FeaturePipeline:
         for feature in self._features:
             result = feature.compute(result)
 
-        self._log.info(
+        self._log.debug(
             "features_computed",
             extra={
                 "rows": result.height,
