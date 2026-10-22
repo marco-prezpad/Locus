@@ -13,11 +13,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
-from locus.evaluation.metrics import PerformanceMetrics
+if TYPE_CHECKING:
+    from locus.evaluation.metrics import PerformanceMetrics
 
 Side = Literal["buy", "sell"]
 

@@ -14,7 +14,7 @@ Date:   22-10-2026
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import polars as pl
 
@@ -23,8 +23,10 @@ from locus.backtest.broker import SimulatedBroker
 from locus.backtest.config import load_backtest_config
 from locus.backtest.engine import BacktestEngine
 from locus.backtest.events import BacktestReport
-from locus.baselines.base import BaselineStrategy
 from locus.infrastructure.logging import LoggerFactory
+
+if TYPE_CHECKING:
+    from locus.baselines.base import BaselineStrategy
 
 CapitalName = Literal["1", "10", "100", "1k", "10k", "100k", "1m"]
 CostScenario = Literal["optimistic", "central", "pessimistic"]

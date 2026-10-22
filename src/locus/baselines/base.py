@@ -18,12 +18,13 @@ Date:   22-10-2026
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 import polars as pl
 
-from locus.evaluation.metrics import PerformanceMetrics
+if TYPE_CHECKING:
+    from locus.evaluation.metrics import PerformanceMetrics
 
 
 class BaselineStrategy(Protocol):

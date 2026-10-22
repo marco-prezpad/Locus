@@ -78,7 +78,7 @@ class FeatureRegistry:
                 raise ValueError(f"unknown feature family: {spec.family!r}")
             feature = factory(name=spec.name, **spec.params)
             features.append(feature)
-        self._log.info(
+        self._log.debug(
             "features_built",
             extra={"count": len(features), "families": [s.family for s in self._specs]},
         )
