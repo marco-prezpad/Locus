@@ -11,6 +11,8 @@ Date:   21-10-2026
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import polars as pl
 
 from locus.data.providers.base import BAR_SCHEMA
@@ -61,3 +63,48 @@ def validate_ohlcv(df: pl.DataFrame) -> pl.DataFrame:
         raise ProviderResponseError("timestamps not sorted ascending")
 
     return df
+
+
+def check_continuity(
+    df: pl.DataFrame,
+    expected_bar_delta: timedelta,
+    tolerance_factor: float = 1.5,
+) -> None:
+    """Verify each asset has no gaps larger than
+    `expected_bar_delta * tolerance_factor` between consecutive bars.
+
+    A single missing bar at a rebalance timestamp can destroy a
+    backtest result: `PortfolioAccounting.equity` would value the
+    position at 0 if the price is missing, producing spurious −100%
+    returns. This check fails loudly before that happens.
+
+    Per-asset. Assets may start or end at different times (that's
+    normal); gaps *within* an asset's span are what we check.
+
+    Raises `ProviderResponseError` with the offending asset and gap.
+    """
+    if df.height == 0:
+        return
+    threshold = expected_bar_delta * tolerance_factor
+
+    for asset_id, group in df.group_by("asset_id"):
+        ts = group["timestamp"].unique().sort()
+        if ts.len() < 2:
+            continue
+        diffs = ts.diff().drop_nulls()
+        max_gap = diffs.max()
+        if max_gap is None:
+            continue
+        # `diff` on Datetime returns Duration; cast for comparison.
+        gap = (
+            max_gap
+            if isinstance(max_gap, timedelta)
+            else (pl.Series([max_gap]).cast(pl.Duration("us")).item())
+        )
+        if gap > threshold:
+            asset_val = asset_id[0] if isinstance(asset_id, tuple) else asset_id
+            raise ProviderResponseError(
+                f"continuity gap in {asset_val!r}: "
+                f"max gap {gap} > threshold {threshold} "
+                f"(expected bar delta {expected_bar_delta})"
+            )

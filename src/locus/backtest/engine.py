@@ -30,7 +30,7 @@ from datetime import datetime
 import numpy as np
 import polars as pl
 
-from locus.backtest.accounting import PortfolioAccounting
+from locus.backtest.accounting import MissingPriceError, PortfolioAccounting
 from locus.backtest.broker import SimulatedBroker
 from locus.backtest.config import BacktestConfig
 from locus.backtest.events import BacktestReport, FillEvent
@@ -112,7 +112,17 @@ class BacktestEngine:
 
             mark_ts = rebalance_ts[i + 1] if i + 1 < len(rebalance_ts) else timestamps[-1]
             mark_prices = prices_at(mark_ts, "close")
-            equity_curve.append(accounting.equity(mark_prices))
+            try:
+                mark_equity = accounting.equity(mark_prices)
+            except MissingPriceError as exc:
+                raise MissingPriceError(
+                    f"backtest {self._config.strategy_name!r} "
+                    f"failed at {mark_ts}: "
+                    f"{exc}. This usually means the OHLCV has a gap "
+                    f"at a rebalance timestamp. Run "
+                    f"validate_ohlcv.check_continuity before the backtest."
+                ) from exc
+            equity_curve.append(mark_equity)
 
         equity = np.array(equity_curve, dtype=np.float64)
         returns = (

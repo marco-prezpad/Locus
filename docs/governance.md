@@ -185,68 +185,94 @@ uses v2 must reference this section.
 
 ## 7.c. MVP-0 closure — final result
 
-**Status: CLOSED with NEGATIVE gate G0 in three independent tests.**
-
-MVP-0 was evaluated at three gates with progressively stricter setups.
-All three point to the same conclusion: no demonstrable alpha in
-technical features (price, volume, volatility) at the horizons tested.
+**Status: CLOSED with NEGATIVE gate G0 across three independent
+evaluations (daily, weekly, null test). No demonstrable alpha in
+technical price/volume features at the horizons tested.**
 
 ### 7.c.1. G0-v1 — daily horizon, 2 years, 3 assets
 
 - Setup: 22 features, daily rebalance, 730 rebalances, 3 assets (BTC,
   ETH, SOL), 2 years of H1 data.
 - Result: Sharpe net −0.55 to +0.49 across 4 baselines.
-- DSR < 0.36 for all. MinBTL = inf. PBO = 0.003 (stable ranking, but
-  no strategy passes DSR or MinBTL).
+- DSR < 0.36 for all. MinBTL = inf (pre-fix formula, see §7.b). PBO =
+  0.003 (stable ranking, but no strategy passes DSR or MinBTL).
 - **Verdict: NEGATIVE.**
 
-### 7.c.2. G0-v2 — weekly horizon, 5 years, 5 assets
+### 7.c.2. G0-v2 — weekly horizon, 5 years, 5 assets (post-fix)
 
 - Setup: 16 features (windowed to weekly scale), weekly rebalance
   (168h), 5 assets (BTC, ETH, SOL, BNB, XRP), 5 years of H1 data,
-  5-fold walk-forward.
-- Result: Sharpe net −0.01 to +0.49. Random Top2 (0.486) beats
-  Momentum (0.444), EqualWeight (0.396), Buy&Hold (0.369).
-- DSR max 0.513 (Random). PBO = 0.803 (ranking is unstable).
-- **Verdict: NEGATIVE.**
+  5-fold walk-forward. CSCV alignment verified, continuity check
+  applied, cumulative rationale.
+- Result:
+
+| Strategy | Sharpe | Total return | MDD | DSR | 95% CI | MinBTL |
+| :--- | ---: | ---: | ---: | ---: | :--- | :--- |
+| Random Top2 | +0.509 | +87.5% | −72.0% | 0.536 | [−0.293, +1.360] | 4.27y |
+| EqualWeight | +0.396 | +30.9% | −78.0% | 0.431 | [−0.466, +1.375] | 7.06y |
+| Buy&Hold | +0.367 | +31.5% | −74.2% | 0.409 | [−0.410, +1.364] | 8.20y |
+| Momentum Top2 | +0.318 | −7.5% | −85.2% | 0.366 | [−0.574, +1.427] | 10.95y |
+
+- **PBO = 0.565** (not 0.803 from the pre-fix run; see §7.c.6 for
+  the diagnostic).
+- **Verdict: NEGATIVE.** No active strategy passes individual criteria
+  and beats Buy&Hold by 0.10 Sharpe.
 
 ### 7.c.3. Null test — momentum vs 200 random seeds
 
-- Setup: same as G0-v2, but Random Top2 run with 200 different seeds
-  to build the null distribution of "pick 2 assets at random".
-- Result:
-  - Null distribution: mean +0.208, std 0.169, p50 +0.232,
-    p95 +0.470.
-  - Momentum Sharpe 0.444 at percentile 93.5.
-  - **p-value (one-sided) = 0.065** (marginal, not significant at 5%).
-  - **Buy&Hold at percentile 84** — 16% of random seeds beat Buy&Hold.
-  - **Delta momentum − Buy&Hold = +0.075**, well within the noise band.
+- Setup: same as G0-v2, `RandomTopK(k=2)` with 200 different seeds
+  (0–199) to build the null distribution of "pick 2 assets at random".
+- Null distribution (200 seeds): mean +0.203, std 0.172, p50 +0.230,
+  p95 +0.458, max +0.588.
+- Momentum Sharpe 0.318 → **percentile 74.0**, **p-value (one-sided) =
+  0.260**. Not marginal. Not significant.
+- Buy&Hold Sharpe 0.367 → percentile 85.0. 15% of random seeds beat
+  Buy&Hold.
+- Delta momentum − Buy&Hold = **−0.049** (momentum is *worse* than
+  Buy&Hold).
+- **Verdict: no evidence of signal.**
 
 ### 7.c.4. Honest interpretation
 
-The three tests together say:
+The three evaluations together say:
 
-1. **The apparent momentum edge over Random (0.236 Sharpe) is mostly
-   beta.** Buy&Hold captures 0.161 of that without any signal. The
-   delta attributable to the signal (momentum − Buy&Hold) is 0.075.
-2. **p = 0.065 is marginal.** With 200 seeds, 13 seeds beat momentum.
-   This is "suggestive" at best, not "demonstrated".
-3. **PBO = 0.803 means the ranking is unstable.** The winner in-sample
-   is not the winner out-of-sample. This is exactly what PBO is
-   designed to detect.
-4. **The DSR criterion (0.95) is mathematically infeasible** with 5
-   years of crypto data even for a well-calibrated strategy (see
-   §7.b). Calibrated DSR 0.80 is achieved by zero strategies.
+1. **The apparent "marginal signal" from the pre-fix run (p=0.065)
+   was a specific-dataset artifact.** After fixing data continuity,
+   CSCV alignment, and applying the cumulative rationale, momentum's
+   p-value is 0.260 — clearly noise.
+2. **Momentum underperforms Buy&Hold** (−0.049 delta). The active
+   strategy destroys value relative to simply holding BTC.
+3. **Random seed=42 (0.509) is one lucky seed.** The 200-seed null
+   has mean 0.203, std 0.172. "Random beats momentum" is that luck,
+   not a signal.
+4. **PBO = 0.565** — ranking is unstable (the reviewer's note: with 4
+   fixed rules and no selection, the null PBO has mean 0.50; 0.565 is
+   consistent with noise).
 
 **Conclusion:** With 5 years of crypto H1 data, 5 assets, 16 technical
-features, and realistic costs, **no strategy has demonstrable active
-alpha over Buy&Hold**. The MVP closes with this result documented.
+features, and realistic costs, **no strategy demonstrates a Sharpe
+high enough to pass the individual tests** (DSR > 0.80, CI_low > 0,
+MinBTL <= 5y, beats benchmark+0.10).
+
+**Power analysis:** With 259 weekly rebalances, a true Sharpe of 0.5
+passes the three individual tests only ~20% of the time; 0.75 ~34%;
+1.0 ~52%; 1.5 ~86%. The NEGATIVE verdict is consistent with both:
+- (a) no signal (true Sharpe ≈ 0), OR
+- (b) a modest signal (Sharpe 0.3–0.7) that the sample cannot
+  distinguish from zero.
+
+MVP-0 cannot resolve (a) vs (b). A larger sample, longer horizon, or
+different feature family (pivote B, funding rates) is required.
+
+**What is established:** no *strong* signal (Sharpe > 0.75 net) in
+technical price/volume features.
+**What is NOT established:** absence of *modest* signal.
 
 ### 7.c.5. What was NOT established
 
-Important: the negative result is about **this specific setup**, not
-about "no edge exists in crypto" or "ML cannot predict crypto
-returns". What was NOT established:
+The negative result is about **this specific setup**, not about "no
+edge exists in crypto" or "ML cannot predict crypto returns". Not
+established:
 
 - That funding rates, on-chain data, or sentiment carry no signal.
 - That multi-horizon ensembles or regime detection add no value.
@@ -258,11 +284,26 @@ returns". What was NOT established:
 Any of these is a legitimate pivot. The MVP-0 platform supports all of
 them without rewriting.
 
-### 7.c.6. Pivots taken
+### 7.c.6. Data instability diagnostic
 
-**Pivote A (weekly horizon): executed, negative** (see G0-v2 above).
-The 2-year signal (momentum 0.42 vs random 0.035) was a small-sample
-artifact. With 5 years, the signal dilutes to p = 0.065 (marginal).
+Between the pre-fix and post-fix runs of G0-v2, the input data changed
+from 218,995 to 218,980 rows (15 rows lost to a 3-hour shift in the
+start boundary of the backfill). This **0.007% data perturbation**
+produced a **−0.126 Sharpe change in momentum** (0.444 → 0.318).
+
+Buy&Hold moved 0.002 over the same change. EqualWeight moved 0.000.
+Random (seed=42) moved +0.023. Only momentum moved materially.
+
+**Interpretation:** a signal that shifts 0.126 Sharpe on 3 rows out of
+218,000 is not robust. The pre-fix result was a specific-dataset
+artifact, not a stable edge. The reviewer's point ("the 0.444 was one
+lucky draw from a wide distribution") is confirmed empirically.
+
+### 7.c.7. Pivots taken
+
+**Pivote A (weekly horizon): executed, negative.** The 2-year signal
+(momentum 0.42 vs random 0.035) was a small-sample artifact. With 5
+years, momentum falls to 0.318 (p=0.260 vs null).
 
 **Pivote B (funding rates): opened after MVP-0 closure.** See
 `docs/g0_protocol_v3.md` (created when pivote B is pre-registered).

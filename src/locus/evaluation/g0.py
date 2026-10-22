@@ -184,15 +184,26 @@ def build_g0_report(
     log = LoggerFactory.get("evaluation.g0")
     per_strategy = [_compute_strategy_report(r, criterion) for r in results]
 
-    # PBO across all strategies' concatenated returns
-    min_len = (
-        min(len(r.returns) for r in results if len(r.returns) > 0)
-        if any(len(r.returns) > 0 for r in results)
-        else 0
-    )
+    # CSCV alignment: all non-empty strategies must have identical
+    # return lengths. A mismatch means the walk-forward folds differ
+    # across strategies (e.g., one strategy had one fewer rebalance in
+    # a fold); truncating to min_len would silently compare misaligned
+    # periods.
+    non_empty = [r for r in results if len(r.returns) > 0]
+    if len(non_empty) >= 2:
+        lengths = {len(r.returns) for r in non_empty}
+        if len(lengths) != 1:
+            raise ValueError(
+                f"CSCV alignment: strategies have different return "
+                f"lengths: "
+                f"{ {r.strategy_name: len(r.returns) for r in non_empty} }. "
+                f"All strategies must have the same number of returns for "
+                f"the PBO comparison to be valid."
+            )
+
     pbo = 0.0
-    if min_len >= 16:
-        matrix = np.column_stack([r.returns[:min_len] for r in results if len(r.returns) > 0])
+    if non_empty and len(non_empty[0].returns) >= 16:
+        matrix = np.column_stack([r.returns for r in non_empty])
         pbo = probability_of_backtest_overfitting(matrix, n_subsamples=16)
 
     benchmark = next(
@@ -205,8 +216,6 @@ def build_g0_report(
     candidates = [s for s in per_strategy if s.strategy_name != criterion.benchmark_name]
     pbo_ok = pbo < criterion.max_pbo
 
-    # An active strategy must (a) pass all individual criteria AND
-    # (b) beat the benchmark by at least `min_sharpe_vs_benchmark`.
     passing_active = [
         s
         for s in candidates
@@ -222,24 +231,39 @@ def build_g0_report(
             f"by >= {criterion.min_sharpe_vs_benchmark}: {winners}. "
             f"PBO={pbo:.3f} < {criterion.max_pbo}."
         )
-    elif not pbo_ok:
-        outcome = "negative"
-        rationale = (
-            f"Negative G0: PBO={pbo:.3f} >= {criterion.max_pbo}; ranking "
-            f"is unstable, no strategy can be trusted out of sample. "
-            f"Benchmark Sharpe={benchmark.sharpe:.3f}."
-        )
     else:
         outcome = "negative"
-        rationale = (
-            f"Negative G0: no active strategy passes all criteria and "
-            f"beats benchmark Sharpe {benchmark.sharpe:.3f} by >= "
-            f"{criterion.min_sharpe_vs_benchmark}. "
-            f"Benchmark itself: DSR={benchmark.dsr:.3f}, "
-            f"CI=[{benchmark.ci_low:+.3f}, {benchmark.ci_high:+.3f}], "
-            f"MinBTL={'inf' if not np.isfinite(benchmark.min_btl_years) else f'{benchmark.min_btl_years:.2f}y'}. "
-            f"PBO={pbo:.3f}. Pivot per docs/governance.md."
+        reasons: list[str] = []
+        individual_fails = [s.strategy_name for s in candidates if not s.passes]
+        if individual_fails:
+            reasons.append(
+                f"{len(individual_fails)}/{len(candidates)} strategies "
+                f"failed individual criteria: {individual_fails}"
+            )
+        beat_fails = [
+            s.strategy_name
+            for s in candidates
+            if s.sharpe <= benchmark.sharpe + criterion.min_sharpe_vs_benchmark
+        ]
+        if beat_fails:
+            reasons.append(
+                f"{len(beat_fails)}/{len(candidates)} strategies failed to "
+                f"beat benchmark Sharpe {benchmark.sharpe:.3f} "
+                f"+ {criterion.min_sharpe_vs_benchmark} margin: {beat_fails}"
+            )
+        if not pbo_ok:
+            reasons.append(f"PBO={pbo:.3f} >= {criterion.max_pbo}: ranking unstable")
+        benchmark_min_btl = (
+            "inf" if not np.isfinite(benchmark.min_btl_years) else f"{benchmark.min_btl_years:.2f}y"
         )
+        benchmark_desc = (
+            f"Benchmark {benchmark.strategy_name}: "
+            f"Sharpe={benchmark.sharpe:.3f}, "
+            f"DSR={benchmark.dsr:.3f}, "
+            f"CI=[{benchmark.ci_low:+.3f}, {benchmark.ci_high:+.3f}], "
+            f"MinBTL={benchmark_min_btl}"
+        )
+        rationale = "Negative G0. " + " | ".join(reasons) + ". " + benchmark_desc + "."
 
     log.debug(
         "g0_report_built",
@@ -248,7 +272,7 @@ def build_g0_report(
             "n_strategies": len(per_strategy),
             "pbo": round(pbo, 3),
             "benchmark_sharpe": round(benchmark.sharpe, 3),
-            "criterion": criterion.min_dsr,
+            "criterion_min_dsr": criterion.min_dsr,
         },
     )
 
