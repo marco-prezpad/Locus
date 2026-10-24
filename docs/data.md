@@ -94,6 +94,28 @@ with the canonical `FX_PROVIDER_SCHEMA` columns (`pair`, `date`,
 - **FX USDT/USD:** `[Kraken, CoinGecko]` via `FallbackFxProvider`.
   CoinGecko is only called if Kraken fails or returns empty.
 
+### 1.4 Funding rates (perpetual futures)
+
+Funding rates are fetched from a **single venue**, chosen by
+accessibility from the deployment region (Spain). See
+`docs/g0_protocol_v3.md` §2 for the venue-selection test.
+
+#### Binance Futures (primary and sole source for pivote B)
+
+- **Endpoint:** `GET /fapi/v1/fundingRate` on `fapi.binance.com`.
+- **History:** full since perpetual contract listing (2020 for BTC/ETH,
+  later for smaller perps).
+- **Cadence:** 8h for most perps (00:00, 08:00, 16:00 UTC). Some newer
+  pairs use 4h or 1h; the provider captures whatever the exchange
+  returns and does not assume 8h.
+- **Pagination:** `startTime` cursor, 1000 funding events per request
+  (~333 days at 8h cadence).
+- **API key:** none required for the historical endpoint.
+- **Role:** sole source for funding rates in pivote B. No fallback
+  chain in this cycle; if Binance Futures becomes inaccessible, the
+  cycle stops and pivots to a different venue (Bybit, OKX) only after
+  re-running the accessibility test.
+  
 `FallbackFxProvider` **does not merge** results across providers: FX
 rates from different sources disagree, and mixing them silently would
 corrupt downstream PnL. The caller always sees one source's data,
@@ -127,6 +149,20 @@ FX pairs are not part of `_SYMBOLS`: they are identified by canonical
 name (`EURUSD`, `USDTUSD`) and each FX provider knows which pairs it
 supports.
 
+### 2.2 Perpetual futures symbols
+
+Perpetual futures use the same canonical `asset_id` and the same
+`BTCUSDT`-style symbol as spot on Binance. The `SymbolMapper` is
+reused unchanged; no separate perp map is needed for the initial
+universe (BTC, ETH, SOL, BNB, XRP).
+
+**Caveat:** not every spot pair has a perpetual. Stablecoins, wrapped
+tokens, and some newer listings have spot pairs but no perp. The
+perp universe is a **strict subset** of the spot universe. The source
+of truth for "which assets have a perp at `t`" is the
+`PerpUniverseBuilder` (§5.2), not `_SYMBOLS`. Perp discovery reports
+which assets from `_SYMBOLS` have a perp on the chosen venue.
+
 ## 3. Validation
 
 `src/locus/data/validation/ohlcv.py` validates the whole DataFrame
@@ -152,6 +188,36 @@ ingestion run. A bad bar does not enter storage.
 does not re-validate the DataFrame; this is acceptable because FX
 providers are constrained to one pair and one granularity per call.
 
+### 3.2 Funding validation
+
+Funding data has its own schema, distinct from `BAR_SCHEMA`:
+
+```text
+FUNDING_SCHEMA:
+asset_id: Utf8
+venue: Utf8
+symbol: Utf8
+timestamp: Datetime("us", "UTC") # publication time, not period end
+funding_rate: Float64 # signed
+```
+
+
+`validate_funding(df, expected_cadence=timedelta(hours=8))` checks:
+
+- Exact schema (columns and dtypes).
+- No nulls.
+- `funding_rate` is finite. Typical range ±0.0075 per 8h period
+  (±0.75%). Values outside ±5% are logged as warnings but not rejected
+  (rare events do happen).
+- Timestamps strictly sorted per asset, no duplicates.
+- **Continuity**: spacing between consecutive timestamps per asset is
+  consistent. A gap > 1.5× the asset's median spacing raises
+  `ProviderResponseError`. Reuses the same `check_continuity` logic as
+  OHLCV, parameterized by expected cadence.
+
+Validation failures abort the ingestion of that asset; the rest of the
+batch continues. A bad funding event does not enter storage.
+
 ## 4. Storage
 
 ### Market Data (Parquet)
@@ -169,6 +235,30 @@ data/processed/fx/pair={pair}/source={source}/year={yyyy}/rates.parquet
 ```
 
 One file per (pair, source, year). Each row carries `pair`, `date`, `rate`, `source`, `fetched_at`. All sources for a pair coexist; the caller selects one via `source=` on read.
+
+### Funding Rates (Parquet)
+
+```text
+data/processed/funding/venue={venue}/asset={asset}/year={yyyy}/rates.parquet
+```
+
+One file per (venue, asset, year). Same Hive-scanning read pattern as market data. Fields: `asset_id`, `venue`, `symbol`, `timestamp`, `funding_rate`. No source column: funding is single-source per venue by construction (one API per venue).
+
+### Funding Raw (Parquet) — first raw layer in the project
+
+```text
+data/raw/funding/{venue}/{asset}/raw.parquet
+```
+
+Literal API response per request, plus a `fetched_at` timestamp. Never mutated after write. Used for audit and replay.
+
+#### Why a raw layer for funding and not for OHLCV:
+
+- The funding response shape has changed historically (Binance migrated the `/fapi/v1/fundingRate` payload fields in 2022).
+- Funding history is small (~3,285 events per asset over 3 years), so the raw dump is cheap.
+- A pre-registered G0-v3 study needs byte-for-byte reproducible input.
+
+OHLCV still writes only to processed. The funding raw layer is the precedent for a later refactor of the OHLCV raw layer, not a prerequisite.
 
 ### CoinGecko Quota State (JSON)
 
@@ -222,6 +312,29 @@ Binance's public `exchangeInfo` does not currently include `onboardDate`, so the
 - **Delisted assets are not discoverable through public APIs.** All registry entries are live assets in the MVP. The `last_tradable_ts` field supports delisted assets in the contract, but no data source populates it yet.
 - **Kraken and CoinGecko do not expose listing dates** through their public APIs. Discovery is Binance-only.
 - **The first-bar fallback is approximate:** It may be later than the real listing date if Binance started storing klines later, or earlier if a symbol was delisted and relisted. This limitation is documented and accepted.
+
+### 5.2 Perp universe (point-in-time)
+
+```text
+data/processed/universe_perps/registry.parquet
+```
+
+Single file, one row per (asset, venue):
+
+- `asset_id: Utf8`
+- `venue: Utf8`
+- `list_date: Datetime("us", "UTC")` — first funding timestamp available
+- `delist_date: Datetime("us", "UTC")` | null — last funding timestamp, or null if still live
+
+A perp is in the universe at `t` if `list_date <= t < delist_date`. `PerpUniverseBuilder.build(t, constraints)` is the perp equivalent of `UniverseBuilder`, pure function of the registry and `t`.
+
+**Discovery**: `/fapi/v1/exchangeInfo` filtered by
+`contractType == "PERPETUAL"` and `status == "TRADING"` provides the currently-live perps with `onboardDate` where present (falls back to
+first funding timestamp otherwise). Historical delistings are **not discoverable** through the live API; they are populated manually
+for the initial universe (BTC, ETH, SOL, BNB, XRP are all live, no delistings in the 3-year window). This is documented honestly and revisited if the universe expands.
+
+**Why this matters**: pivote B is a cross-sectional strategy. A perp that lists mid-window and is treated as present from the start, or a
+delisted perp valued at 0, would contaminate the cross-sectional ranking. The point-in-time universe is a **prerequisite**, not a follow-up.
 
 ---
 
@@ -278,6 +391,41 @@ The `FxConverter` (in `src/locus/data/fx/converter.py`) consumes the
 store to convert amounts between currencies. Its semantics
 (staleness, routing, audit trail) are documented in
 `docs/currency.md`, not here.
+
+### Funding ingestion
+
+`FundingIngestor` exposes two methods:
+
+- **`run_batch(start, end)`**: for each asset in the perp universe at
+  `end`, fetch funding in `[max(list_date, start), min(delist_date or end, end))`.
+  Skip assets listed after `end` or delisted before `start`. Per-asset
+  outcomes captured in a `FundingIngestionReport`.
+- **`run_incremental(lookback_days=7)`**: fetch only the last N days of
+  funding. Cache skip: if the store already has the most recent funding
+  timestamp for an asset, skip the fetch. Idempotent: re-running on the
+  same day returns `skipped` for all assets.
+
+Both are invoked **manually or by an external cron**. Neither
+auto-triggers. Same as FX (§6.3). Recommended cadence: once per day
+at 01:00 UTC.
+
+**Rate limits (Binance Futures):** weight 1 per request, 2400 weight/min
+general limit. 5 assets × 1 request/asset ≈ 5 requests per batch.
+**~480× headroom.** No monthly quota. Retries: same `tenacity` policy
+as OHLCV (5 attempts, exponential backoff).
+
+**Failure semantics:** same `ProviderError` hierarchy as OHLCV.
+- `ProviderNoDataError` → skip asset, log `funding_empty`.
+- `ProviderResponseError` → skip asset, log `funding_failed`.
+- Empty DataFrame with no error → valid outcome (asset not yet listed
+  or just delisted), log `funding_skipped`.
+- Missing price for a position during funding accrual →
+  `MissingPriceError` from `PortfolioAccounting`. Engine fails loudly.
+  Same contract as OHLCV.
+
+**Reproducibility:** all funding ingestion and downstream scripts accept
+`--end-date` with a fixed default (`2026-10-01`). See
+`docs/g0_protocol_v3.md` §4.3.
 
 ---
 
@@ -366,6 +514,16 @@ The distinction matters: `rows_written == 0` with no error is a valid outcome (a
   two-hop conversions route correctly, that source per pair is
   logged, and that the incremental cache skip works on re-runs.
 
+### Funding
+
+- **`scripts/smoke_b1.py`**: fetches 3 years of funding for BTC, verifies
+  continuity and schema, does a store roundtrip, prints per-asset stats
+  (count, min, max, mean of `funding_rate`, null count). Fails loudly if
+  the API is inaccessible (HTTP 451/403) or if continuity is violated.
+- **`scripts/check_backfill_funding.py`**: quick coverage check per
+  asset (first/last timestamp, count, cadence). Analogous to
+  `check_backfill.py` for OHLCV.
+
 ---
 
 ## 10. Adding a New Venue
@@ -387,6 +545,21 @@ To add a provider for a new exchange:
 3. Register it in the fallback chain: `FallbackFxProvider([...])`.
 4. Add unit tests with mocked HTTP (including the quota paths).
 5. Document its limitations here (history depth, rate limits, API key requirement, supported pairs).
+
+### Funding
+
+1. Add the asset to `_SYMBOLS` if not present (reuses the spot symbol).
+2. Run `PerpUniverseDiscovery` to update
+   `universe_perps/registry.parquet`.
+3. Run `FundingIngestor.run_batch(start, end)` for the new asset.
+4. Verify schema, continuity, and store roundtrip.
+5. Document any perp-specific limitation (list_date known? delisted?
+   cadence 8h or different?).
+
+Adding a new **venue** for funding (Bybit, OKX) requires a new
+`FundingProvider` implementing the same interface, plus a new raw and
+processed layout under `venue=<new>`. The `FundingStore` partitions by
+`venue` from day 1, so no storage migration is needed.
 
 ---
 
@@ -455,3 +628,25 @@ no duplicates, UTC timestamps, no nulls in required columns. Any
 change that breaks them (new provider, validation relaxation)
 invalidates the backtest results silently; extend `validate_ohlcv`
 before shipping.
+
+## 15. Downstream: Funding Features
+
+The funding feature layer (B.2) consumes the funding store plus OHLCV
+prices (for valuation). Feature definitions, strategy semantics,
+market-neutrality constraints, and the pre-registered criterion are in
+**`docs/g0_protocol_v3.md`**, not here. This section records only the
+contract the data layer provides to that layer:
+
+- Funding timestamps are **publication time**, not period end. A funding
+  event at `t` is available for any price bar with `timestamp >= t`.
+- The perp universe is **point-in-time** (list/delist dates from §5.2).
+- Continuity is enforced at ingestion (§3.2) and again at feature
+  computation. Gaps fail loudly, not silently.
+- Any feature that reads funding at `t` reads only events with
+  `timestamp <= t`. Leakage tests in `tests/unit/features/test_funding_leakage.py`
+  verify this.
+
+Any change to this layer that breaks point-in-time discipline, point-in-
+time universe, or continuity **invalidates the pre-registration** and
+requires a new protocol version (`v3.1`, `v4`, …). The pre-registration
+is the contract; the data layer is its foundation.
