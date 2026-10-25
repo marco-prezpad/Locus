@@ -67,6 +67,13 @@ data:
       - {name: xs_percentile_return_168, family: xs_percentile_rank, params: {source: return_168}}
       - {name: xs_zscore_return_168, family: xs_zscore, params: {source: return_168}}
       - {name: rel_momentum_vs_market_168, family: relative_momentum, params: {source: return_168}}
+    funding_active:
+      - {name: funding_zscore_30d, family: funding_zscore, params: {window: 90}}
+      - {name: funding_zscore_7d, family: funding_zscore, params: {window: 21}}
+      - {name: funding_extreme_30d, family: funding_extreme, params: {source: funding_zscore_30d}}
+      - {name: funding_trend_7d, family: funding_trend, params: {window: 21}}
+      - {name: funding_xs_rank, family: funding_xs_rank, params: {source: funding_rate}}
+      - {name: funding_xs_zscore, family: funding_xs_zscore, params: {source: funding_rate}}
   labels:
     horizons_bars:
       - {name: future_return_1d, bars: 24}

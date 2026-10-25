@@ -12,6 +12,7 @@ Date:   22-10-2026
 from locus.features import (  # noqa: F401 — register
     cross_sectional,
     extended,
+    funding,  # noqa: F401 — register
     returns,
     trend,
     volatility,
@@ -33,6 +34,14 @@ from locus.features.extended import (
     RelativeVolumeFeature,
     VolatilityRatioFeature,
     VolumeZScoreFeature,
+)
+from locus.features.funding import (
+    FundingExtremeFeature,
+    FundingTrendFeature,
+    FundingXSRankFeature,
+    FundingXSZScoreFeature,
+    FundingZScoreFeature,
+    normalize_funding_timestamps,
 )
 from locus.features.pipeline import FeaturePipeline
 from locus.features.returns import LogReturnFeature, ReturnFeature
@@ -57,4 +66,10 @@ __all__ = [
     "VolatilityRatioFeature",
     "VolumeZScoreFeature",
     "register_feature",
+    "FundingExtremeFeature",
+    "FundingTrendFeature",
+    "FundingXSRankFeature",
+    "FundingXSZScoreFeature",
+    "FundingZScoreFeature",
+    "normalize_funding_timestamps",
 ]

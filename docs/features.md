@@ -235,6 +235,29 @@ computed across assets at the same timestamp.
 MVP. Equal-weight is the simplest defensible choice; market-cap
 weighting lands when indices are supported (B9).
 
+### 4.11 Funding features (B.2)
+
+Computed on the funding DataFrame (`asset_id`, `venue`, `symbol`,
+`timestamp`, `funding_rate`), not on the price panel. Per-asset
+features group by `asset_id`; cross-sectional features group by
+`timestamp` after `normalize_funding_timestamps` (floors each
+timestamp to the nearest minute to absorb 2-3ms drift observed in
+production).
+
+| Feature | Family | Formula | Nulls |
+| :--- | :--- | :--- | :--- |
+| `funding_zscore_30d` | funding_zscore | rolling z-score, window 90 | 89 warm-up |
+| `funding_zscore_7d` | funding_zscore | rolling z-score, window 21 | 20 warm-up |
+| `funding_extreme_30d` | funding_extreme | `1{|zscore_30d| > 2}` | inherits source |
+| `funding_trend_7d` | funding_trend | `rate[t] − rate[t−21]` | 21 warm-up |
+| `funding_xs_rank` | funding_xs_rank | percentile rank across assets, (0,1) | 0 (5 assets) |
+| `funding_xs_zscore` | funding_xs_zscore | cross-sectional z-score | 0 (5 assets) |
+
+Leakage test: `tests/unit/features/test_funding_leakage.py` (truncation
+invariance). Cross-sectional alignment test:
+`test_xs_rank_aligned_with_drift` (2ms and 4ms drift on two assets
+must produce aligned ranks after normalization).
+
 ## 5. Default feature set
 
 The 22 features enabled by default in `configs/base.yaml`:
