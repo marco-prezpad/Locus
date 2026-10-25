@@ -131,7 +131,34 @@ only, it is not edge.
 rebalance (2 assets × 2 sides), and executes 0-1. The "portfolio" is
 90%+ cash. That is the real answer for a user starting small.
 
-## 8. Cross-references
+## 8. Funding cash flows (B3)
+
+The engine can apply perpetual funding as a separate cash flow, independent
+of fills and execution costs.
+
+- **Sign convention:** positive funding rate ⇒ longs pay shorts.
+  `cash_flow = -qty * price * funding_rate`.
+- **Timing:** funding events are applied at their own timestamp, using the
+  `close` of the funding bar as reference price. No look-ahead: only events
+  with `timestamp <= mark_ts` are applied before marking equity.
+- **Isolation:** funding does **not** affect fill prices or execution costs.
+  `test_funding_cash_flow_does_not_affect_fill_price` enforces this.
+- **Report fields:** `BacktestReport.total_funding_quote` (signed) and
+  `n_funding_events_applied`.
+- **Disabling:** set `BacktestConfig.apply_funding=False` to ignore any
+  funding DataFrame passed to `run`.
+- **Attribution rule:** funding at timestamp `f` is attributed to the position
+  that existed at `f`:
+  - If `f < exec_ts` (the funding event precedes the fill of the current
+    rebalance cycle), the **pre-fill** position is used (typically 0 for the
+    first cycle, non-zero for subsequent ones).
+  - Otherwise, the **post-fill** position is used.
+  - Events that fall in `(prev_mark_ts, exec_ts)` are therefore attributed to
+    the position held before the fill, not after. This prevents a buy executed
+    at `exec_ts` from retroactively "owing" funding for an event that occurred
+    hours earlier.
+
+## 9. Cross-references
 
 - `docs/baselines.md` — the strategies being evaluated.
 - `docs/features.md` — the source features.

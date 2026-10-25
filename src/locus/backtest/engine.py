@@ -1,8 +1,8 @@
 """
 engine.py
 
-BacktestEngine: drives the loop from weights DataFrame + OHLCV to a
-BacktestReport.
+BacktestEngine: drives the loop from weights DataFrame + OHLCV to
+a BacktestReport.
 
 Timeline:
 - rebalance_ts[0]: strategy generates weights from close of t0.
@@ -18,6 +18,14 @@ equity_curve:
 - [N] = equity at close of final bar
 
 returns[i] = equity_curve[i+1] / equity_curve[i] - 1.
+
+Funding cash flows (B3): when `funding` is provided and
+`config.apply_funding` is True, events are applied before marking equity
+using the close of the funding bar as reference price (point-in-time
+correct). Funding does NOT affect fill prices. Events are attributed to
+the position that existed at the funding timestamp: pre-fill position if
+the funding event precedes the fill at `exec_ts`, post-fill position
+otherwise. Events before the first fill (position == 0) are skipped.
 
 Author: Marco Pérez Padilla
 Date:   22-10-2026
@@ -45,7 +53,12 @@ class BacktestEngine:
         self._broker = broker
         self._log = LoggerFactory.get("backtest.engine")
 
-    def run(self, strategy_weights: pl.DataFrame, ohlcv: pl.DataFrame) -> BacktestReport:
+    def run(
+        self,
+        strategy_weights: pl.DataFrame,
+        ohlcv: pl.DataFrame,
+        funding: pl.DataFrame | None = None,
+    ) -> BacktestReport:
         ohlcv_ext = enrich_with_market_state(ohlcv, bars_per_day=self._config.bars_per_day).sort(
             ["asset_id", "timestamp"]
         )
@@ -61,6 +74,7 @@ class BacktestEngine:
                 "sigma": row["sigma_daily"] or 0.0,
                 "volume": row["daily_volume_quote"] or 0.0,
             }
+
         assets = list(lookup.keys())
 
         def prices_at(ts: datetime, field: str) -> dict[str, float]:
@@ -80,6 +94,18 @@ class BacktestEngine:
         equity_curve = [self._config.capital]
         all_fills: list[FillEvent] = []
         n_orders_generated = 0
+        total_funding_quote = 0.0
+        n_funding_events_applied = 0
+
+        # Pre-index funding events by (asset_id, timestamp) for O(1) lookup.
+        funding_events: dict[tuple[str, datetime], float] = {}
+        if funding is not None and self._config.apply_funding:
+            for row in funding.iter_rows(named=True):
+                key = (row["asset_id"], row["timestamp"])
+                funding_events[key] = float(row["funding_rate"])
+
+        applied_funding: set[tuple[str, datetime]] = set()
+        prev_mark_ts: datetime | None = None
 
         for i, ts in enumerate(rebalance_ts):
             weights_df = strategy_weights.filter(pl.col("timestamp") == ts)
@@ -99,6 +125,11 @@ class BacktestEngine:
             sigma = {a: lookup[a][ts]["sigma"] for a in assets if ts in lookup[a]}
             volume = {a: lookup[a][ts]["volume"] for a in assets if ts in lookup[a]}
 
+            # Capture positions BEFORE the fill so funding events that
+            # occurred between prev_mark_ts and exec_ts use the correct
+            # (pre-fill) quantity.
+            pre_fill_positions = {a: accounting.get_position(a) for a in assets}
+
             fills = self._broker.execute_rebalance(
                 timestamp=exec_ts,
                 current_equity=current_equity,
@@ -111,6 +142,43 @@ class BacktestEngine:
             all_fills.extend(fills)
 
             mark_ts = rebalance_ts[i + 1] if i + 1 < len(rebalance_ts) else timestamps[-1]
+
+            if funding_events:
+                for (asset_id, funding_ts), rate in funding_events.items():
+                    if (asset_id, funding_ts) in applied_funding:
+                        continue
+                    if funding_ts > mark_ts:
+                        continue
+                    if prev_mark_ts is not None and funding_ts <= prev_mark_ts:
+                        continue
+
+                    # Attribute to the position that existed at the funding
+                    # timestamp: pre-fill if the event precedes the fill,
+                    # post-fill otherwise.
+                    if funding_ts < exec_ts:
+                        qty = pre_fill_positions.get(asset_id, 0.0)
+                    else:
+                        qty = accounting.get_position(asset_id)
+
+                    if qty == 0:
+                        applied_funding.add((asset_id, funding_ts))
+                        continue
+
+                    if funding_ts in lookup.get(asset_id, {}):
+                        ref_price = lookup[asset_id][funding_ts]["close"]
+                    else:
+                        ref_price = lookup[asset_id].get(mark_ts, {}).get("close")
+                    if ref_price is None:
+                        applied_funding.add((asset_id, funding_ts))
+                        continue
+
+                    flow = accounting.apply_funding(asset_id, qty, ref_price, rate)
+                    total_funding_quote += flow
+                    n_funding_events_applied += 1
+                    applied_funding.add((asset_id, funding_ts))
+
+            prev_mark_ts = mark_ts
+
             mark_prices = prices_at(mark_ts, "close")
             try:
                 mark_equity = accounting.equity(mark_prices)
@@ -129,7 +197,9 @@ class BacktestEngine:
             equity[1:] / equity[:-1] - 1.0 if len(equity) > 1 else np.array([], dtype=np.float64)
         )
         metrics = compute_metrics(
-            returns, self._config.periods_per_year, self._config.risk_free_rate_annual
+            returns,
+            self._config.periods_per_year,
+            self._config.risk_free_rate_annual,
         )
 
         total_cost_quote = float(sum(f.cost_quote for f in all_fills))
@@ -150,7 +220,10 @@ class BacktestEngine:
             n_orders_skipped_lot=self._broker.n_skipped_lot,
             total_cost_quote=total_cost_quote,
             total_cost_bps=total_cost_bps,
+            total_funding_quote=total_funding_quote,
+            n_funding_events_applied=n_funding_events_applied,
         )
+
         self._log.info(
             "backtest_completed",
             extra={
@@ -162,8 +235,10 @@ class BacktestEngine:
                 "executed": report.n_orders_executed,
                 "skipped_min": report.n_orders_skipped_min,
                 "cost_bps": round(report.total_cost_bps, 2),
+                "funding_quote": round(report.total_funding_quote, 4),
             },
         )
+
         return report
 
     def _empty_report(self) -> BacktestReport:
@@ -173,4 +248,13 @@ class BacktestEngine:
             equity_curve=np.array([self._config.capital]),
             returns=np.array([]),
             metrics=compute_metrics(np.array([]), self._config.periods_per_year),
+            fills=[],
+            n_orders_generated=0,
+            n_orders_executed=0,
+            n_orders_skipped_min=0,
+            n_orders_skipped_lot=0,
+            total_cost_quote=0.0,
+            total_cost_bps=0.0,
+            total_funding_quote=0.0,
+            n_funding_events_applied=0,
         )

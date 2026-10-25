@@ -1,7 +1,7 @@
 """
 test_accounting.py
 
-Cash and positions accounting.
+Cash and positions accounting, including funding cash flows.
 
 Author: Marco Pérez Padilla
 Date:   22-10-2026
@@ -54,3 +54,26 @@ def test_equity_with_borrowed_cash() -> None:
     assert a.equity({"BTC": 30000.0}) == pytest.approx(0.0)
     # -30 cash + 0.001 BTC × 31000 = 1.0 (P&L = +1 USDT)
     assert a.equity({"BTC": 31000.0}) == pytest.approx(1.0)
+
+
+def test_apply_funding_long_pays() -> None:
+    """Long position + positive funding rate => cash decreases."""
+    a = PortfolioAccounting(cash=1000.0, positions={"BTC": 1.0})
+    flow = a.apply_funding("BTC", qty=1.0, price=100.0, funding_rate=0.001)
+    assert flow == pytest.approx(-0.1)
+    assert a.cash == pytest.approx(999.9)
+
+
+def test_apply_funding_short_receives() -> None:
+    """Short position + positive funding rate => cash increases."""
+    a = PortfolioAccounting(cash=1000.0, positions={"BTC": -1.0})
+    flow = a.apply_funding("BTC", qty=-1.0, price=100.0, funding_rate=0.001)
+    assert flow == pytest.approx(+0.1)
+    assert a.cash == pytest.approx(1000.1)
+
+
+def test_apply_funding_zero_rate_is_noop() -> None:
+    a = PortfolioAccounting(cash=1000.0, positions={"BTC": 1.0})
+    flow = a.apply_funding("BTC", qty=1.0, price=100.0, funding_rate=0.0)
+    assert flow == 0.0
+    assert a.cash == pytest.approx(1000.0)
