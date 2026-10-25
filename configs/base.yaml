@@ -84,6 +84,15 @@ data:
       horizon_bars: 168
       lookback_bars: 168
       rebalance_freq_bars: 168
+  funding:
+    venue: "binance_futures"
+    base_url: "https://fapi.binance.com"
+    max_events_per_request: 1000
+    timeout_seconds: 30
+    max_retries: 5
+    expected_cadence_hours: 8
+    default_end_date: "2026-10-01"
+    universe_assets: ["BTC", "ETH", "SOL", "BNB", "XRP"]
 
 model:
   default_horizon_hours: 24
