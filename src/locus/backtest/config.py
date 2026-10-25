@@ -2,11 +2,12 @@
 config.py
 
 BacktestConfig combines everything the engine needs: capital, cost
-model, execution constraints (min notional, lot sizes), and time
-parameters.
+model, execution constraints (min notional, lot sizes), time parameters,
+and whether funding cash flows are applied when a funding DataFrame is
+provided.
 
 Loaders:
-- `load_capital_scenario(name)`: reads `configs/capital/<name>.yaml`.
+- `load_capital_scenario(name)`: reads `configs/capital/*.yaml`.
 - `load_backtest_config(capital_name, strategy_name, cost_scenario)`:
   composes a full BacktestConfig.
 
@@ -52,6 +53,7 @@ class BacktestConfig:
     bars_per_day: int = 24
     rebalance_freq_bars: int = 24
     risk_free_rate_annual: float = 0.0
+    apply_funding: bool = True  # if funding is provided, apply it
 
     def __post_init__(self) -> None:
         if self.capital <= 0:
@@ -72,7 +74,7 @@ class BacktestConfig:
 
 
 def load_capital_scenario(name: str) -> dict:
-    """Read `configs/capital/<name>.yaml`."""
+    """Read `configs/capital/*.yaml`."""
     path = Path(f"configs/capital/{name}.yaml")
     if not path.exists():
         raise FileNotFoundError(f"Capital scenario not found: {path}")

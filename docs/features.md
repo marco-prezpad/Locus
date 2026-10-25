@@ -258,6 +258,16 @@ invariance). Cross-sectional alignment test:
 `test_xs_rank_aligned_with_drift` (2ms and 4ms drift on two assets
 must produce aligned ranks after normalization).
 
+**Null contract for z-score features (`funding_zscore_*`, `funding_xs_zscore`):**
+
+- `null` during warm-up (incomplete rolling window) or where the input is null.
+- `0.0` when the rolling / cross-sectional standard deviation is exactly zero
+  (constant funding rate within the window or across assets). A constant rate
+  carries no dispersion information; returning `0.0` (neutral) instead of `null`
+  avoids a selection bias: calm markets (funding pinned at the venue default,
+  e.g. Binance `0.0001`) would otherwise be systematically excluded when nulls
+  are dropped before training.
+
 ## 5. Default feature set
 
 The 22 features enabled by default in `configs/base.yaml`:

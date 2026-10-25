@@ -7,6 +7,16 @@ schema (asset_id, venue, symbol, timestamp, funding_rate).
 Point-in-time: at timestamp t, features use only funding data with
 timestamp <= t. Enforced by tests/unit/features/test_funding_leakage.py.
 
+Null contract (z-score features):
+    - None during warm-up (incomplete rolling window) or where the input is null.
+    - 0.0 when the rolling / cross-sectional standard deviation is exactly zero.
+      A constant rate carries no dispersion information; returning 0.0 (neutral)
+      avoids a selection bias: calm markets (funding pinned at the venue default,
+      e.g. Binance 0.0001) would otherwise be systematically excluded when nulls
+      are dropped before training. Observed empirically: ~6% of 7d z-scores on
+      a 5-asset universe were nulls concentrated in calm markets before this fix.
+    - the z-score otherwise.
+
 Timestamp alignment: funding timestamps carry 2-3ms drift in
 production (observed at 2026-09-30 16:00:00.002+00:00). Cross-
 sectional features group by timestamp and require alignment across
@@ -37,6 +47,10 @@ def normalize_funding_timestamps(
     Flooring to 1 minute collapses the drift. Cross-sectional features
     (which group by timestamp) must be computed on normalized data;
     per-asset features are agnostic (they group by asset_id).
+
+    NOTE: this function returns a new DataFrame where the `timestamp`
+    column is floored. Callers that need the original timestamp for
+    downstream joins (e.g. with OHLCV bars) must preserve it separately.
     """
     return df.with_columns(pl.col("timestamp").dt.truncate(rounding).alias("timestamp"))
 
@@ -45,19 +59,10 @@ def normalize_funding_timestamps(
 class FundingZScoreFeature:
     """Rolling z-score of funding_rate over `window` periods, per asset.
 
-    Null-handling contract:
-        - None during warm-up (insufficient history) or where `funding_rate` is null.
-        - 0.0 when the rolling std is exactly 0 (constant funding rate within the
-          window). A constant rate carries no dispersion information, so 0.0 (the
-          neutral z-score) is more useful than a null and avoids a selection bias
-          downstream: calm markets (funding pinned at the venue default, e.g.
-          Binance 0.0001) would otherwise be systematically excluded when nulls
-          are dropped before training.
-        - the z-score otherwise.
-
-    History: before 2026-10, std == 0 also produced None. Changed after observing
-    that ~6% of 7d z-scores on a 5-asset universe were nulls concentrated in calm
-    markets.
+    Null contract:
+        - None during warm-up or where `funding_rate` is null.
+        - 0.0 when rolling std is exactly 0 (constant rate in the window).
+        - z-score otherwise.
     """
 
     name: str
@@ -86,7 +91,12 @@ class FundingZScoreFeature:
 @dataclass(frozen=True, slots=True)
 class FundingExtremeFeature:
     """Binary flag: 1 if |source| > threshold, 0 otherwise. Null where
-    source is null."""
+    source is null.
+
+    Note: since z-score features return 0.0 (not null) when std == 0, an
+    extreme flag built on top of them inherits 0 (not extreme) in those rows.
+    This is intentional: a constant funding rate is not an extreme event.
+    """
 
     name: str
     source: str = "funding_zscore_30d"
@@ -134,7 +144,12 @@ class FundingTrendFeature:
 class FundingXSRankFeature:
     """Cross-sectional percentile rank of `source` across assets at
     each timestamp, in (0, 1). Ties get the same value. Normalizes
-    timestamps before grouping to absorb drift."""
+    timestamps before grouping to absorb drift.
+
+    NOTE: the output DataFrame carries the floored timestamp, not the
+    original. If downstream joins with OHLCV require the original
+    timestamp, join before this feature or preserve a copy of the
+    timestamp column."""
 
     name: str
     source: str = "funding_rate"
@@ -157,15 +172,16 @@ class FundingXSRankFeature:
 
 @dataclass(frozen=True, slots=True)
 class FundingXSZScoreFeature:
-    """Cross-sectional z-score of `source` across assets at each timestamp.
+    """Cross-sectional z-score of `source` across assets at each
+    timestamp.
 
-    Null-handling contract (mirrors FundingZScoreFeature):
-        - None when `source` is null, or when fewer than 2 assets are present in
-          the cross-section (std undefined).
-        - 0.0 when std is exactly 0 (all assets share the same funding rate):
-          no dispersion, neutral z-score.
-        - the z-score otherwise.
-    """
+    Null contract (mirrors FundingZScoreFeature):
+        - None when `source` is null or fewer than 2 assets in the cross-section.
+        - 0.0 when cross-sectional std is exactly 0 (all assets share the rate).
+        - z-score otherwise.
+
+    NOTE: the output DataFrame carries the floored timestamp, not the
+    original (see FundingXSRankFeature)."""
 
     name: str
     source: str = "funding_rate"

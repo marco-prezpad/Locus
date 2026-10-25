@@ -239,3 +239,17 @@ def test_normalize_idempotent() -> None:
     once = normalize_funding_timestamps(df)
     twice = normalize_funding_timestamps(once)
     assert once.equals(twice)
+
+
+def test_xs_features_floor_timestamps_to_minute() -> None:
+    """XS features normalize timestamps internally. Verify the output timestamp
+    is floored to the minute (drift absorbed) and document the contract."""
+    base = datetime(2024, 1, 1, tzinfo=UTC) + timedelta(milliseconds=2)
+    df = pl.DataFrame(
+        [
+            {"asset_id": "A", "timestamp": base, "funding_rate": 0.0001},
+            {"asset_id": "B", "timestamp": base, "funding_rate": 0.0002},
+        ]
+    )
+    result = FundingXSRankFeature(name="r", source="funding_rate").compute(df)
+    assert all(ts.second == 0 and ts.microsecond == 0 for ts in result["timestamp"].to_list())

@@ -50,6 +50,8 @@ class BacktestReport:
     n_orders_skipped_lot: int = 0
     total_cost_quote: float = 0.0
     total_cost_bps: float = 0.0
+    total_funding_quote: float = 0.0
+    n_funding_events_applied: int = 0
 
     @property
     def execution_rate(self) -> float:

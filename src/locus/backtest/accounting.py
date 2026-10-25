@@ -1,12 +1,14 @@
 """
 accounting.py
 
-PortfolioAccounting tracks cash and positions. Pure state; the broker
-mutates it via `apply_fill`, the engine reads it via `equity`.
+PortfolioAccounting tracks cash and positions. Pure state; the
+broker mutates it via `apply_fill`, the engine reads it via `equity`.
+`apply_funding` mutates cash with the funding cash flow, independent
+of fills and execution costs.
 
-`equity(prices)` raises `MissingPriceError` if a position's asset has
-no price. Valuing a missing asset at 0 silently produces spurious
-−100% returns; failing loudly is the only defensible behavior.
+`equity(prices)` raises `MissingPriceError` if a position's asset has no
+price. Valuing a missing asset at 0 silently produces spurious −100%
+returns; failing loudly is the only defensible behavior.
 
 Author: Marco Pérez Padilla
 Date:   22-10-2026
@@ -31,14 +33,32 @@ class PortfolioAccounting:
         return self.positions.get(asset_id, 0.0)
 
     def apply_fill(self, asset_id: str, delta_qty: float, fill_price: float) -> None:
-        """Apply a signed quantity change. Positive = buy, negative =
-        sell. Cash flow is `-delta_qty * fill_price`."""
+        """Apply a signed quantity change. Positive = buy, negative = sell.
+        Cash flow is `-delta_qty * fill_price`."""
         self.cash -= delta_qty * fill_price
         new_qty = self.positions.get(asset_id, 0.0) + delta_qty
         if abs(new_qty) < 1e-12:
             self.positions.pop(asset_id, None)
         else:
             self.positions[asset_id] = new_qty
+
+    def apply_funding(
+        self,
+        asset_id: str,
+        qty: float,
+        price: float,
+        funding_rate: float,
+    ) -> float:
+        """Apply the funding cash flow for a position.
+
+        Convention: positive funding rate => longs pay shorts.
+            cash_flow = -qty * price * funding_rate
+
+        Returns the signed cash flow applied.
+        """
+        cash_flow = -qty * price * funding_rate
+        self.cash += cash_flow
+        return cash_flow
 
     def equity(self, prices: dict[str, float]) -> float:
         """Cash plus mark-to-market of positions.

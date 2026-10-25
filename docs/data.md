@@ -115,7 +115,7 @@ accessibility from the deployment region (Spain). See
   chain in this cycle; if Binance Futures becomes inaccessible, the
   cycle stops and pivots to a different venue (Bybit, OKX) only after
   re-running the accessibility test.
-  
+
 `FallbackFxProvider` **does not merge** results across providers: FX
 rates from different sources disagree, and mixing them silently would
 corrupt downstream PnL. The caller always sees one source's data,
@@ -650,3 +650,10 @@ Any change to this layer that breaks point-in-time discipline, point-in-
 time universe, or continuity **invalidates the pre-registration** and
 requires a new protocol version (`v3.1`, `v4`, …). The pre-registration
 is the contract; the data layer is its foundation.
+
+### Known coverage gap: BTC
+
+BTC has ~2,556 funding events vs ~3,285 for ETH/SOL/BNB/XRP in the snapshot
+ending 2026-10-01 (~243 days less history, or a data gap). This is expected
+and does not affect feature correctness (warm-up nulls are per-asset), but it
+does mean BTC has a shorter usable sample for cross-asset comparisons.
