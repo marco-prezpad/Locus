@@ -151,6 +151,19 @@ class SplitsConfig(BaseSettings):
     walk_forward: WalkForwardSplitConfig = Field(default_factory=WalkForwardSplitConfig)
 
 
+class FundingConfig(BaseSettings):
+    """Funding rate data configuration."""
+
+    venue: str = "binance_futures"
+    base_url: str = "https://fapi.binance.com"
+    max_events_per_request: int = 1000
+    timeout_seconds: int = 30
+    max_retries: int = 5
+    expected_cadence_hours: int = 8
+    default_end_date: str = "2026-10-01"
+    universe_assets: list[str] = Field(default_factory=lambda: ["BTC", "ETH", "SOL", "BNB", "XRP"])
+
+
 class DataConfig(BaseSettings):
     """Filesystem locations and storage options for market data."""
 
@@ -164,6 +177,7 @@ class DataConfig(BaseSettings):
     features: FeaturesConfig = Field(default_factory=FeaturesConfig)
     labels: LabelsConfig = Field(default_factory=LabelsConfig)
     splits: SplitsConfig = Field(default_factory=SplitsConfig)
+    funding: FundingConfig = Field(default_factory=FundingConfig)
 
 
 class ModelConfig(BaseSettings):
