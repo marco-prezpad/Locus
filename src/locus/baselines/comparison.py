@@ -4,6 +4,9 @@ comparison.py
 Helpers to run multiple baselines on the same dataset and produce a
 comparison table.
 
+Funding (B4): passed through to the VectorizedEvaluator so all
+strategies are compared net of funding.
+
 Author: Marco Pérez Padilla
 Date:   22-10-2026
 """
@@ -22,14 +25,16 @@ def run_baselines(
     strategies: list[BaselineStrategy],
     evaluator: VectorizedEvaluator,
     rebalance_freq: int,
+    funding: pl.DataFrame | None = None,
 ) -> dict[str, EvaluationResult]:
     """Run all strategies on the same data. Returns name → result."""
     log = LoggerFactory.get("baselines.comparison")
     results: dict[str, EvaluationResult] = {}
+
     for strategy in strategies:
         log.info("strategy_started", extra={"strategy": strategy.name})
         weights = strategy.generate_weights(df, rebalance_freq)
-        result = evaluator.evaluate(strategy.name, weights, df)
+        result = evaluator.evaluate(strategy.name, weights, df, funding=funding)
         results[strategy.name] = result
         log.info(
             "strategy_completed",
@@ -38,8 +43,10 @@ def run_baselines(
                 "n_periods": result.metrics.n_periods,
                 "sharpe": round(result.metrics.sharpe, 3),
                 "total_return": round(result.metrics.total_return, 4),
+                "funding_cost": round(result.total_funding_cost, 4),
             },
         )
+
     return results
 
 
@@ -63,8 +70,10 @@ def comparison_table(results: dict[str, EvaluationResult]) -> pl.DataFrame:
                 "calmar": m.calmar,
                 "hit_rate": m.hit_rate,
                 "turnover": m.turnover,
+                "funding_cost": r.total_funding_cost,
             }
         )
+
     if not rows:
         return pl.DataFrame(
             schema={
@@ -79,6 +88,8 @@ def comparison_table(results: dict[str, EvaluationResult]) -> pl.DataFrame:
                 "calmar": pl.Float64,
                 "hit_rate": pl.Float64,
                 "turnover": pl.Float64,
+                "funding_cost": pl.Float64,
             }
         )
+
     return pl.DataFrame(rows).sort("sharpe", descending=True)

@@ -2,17 +2,20 @@
 walk_forward.py
 
 WalkForwardBaselineEvaluator: runs a baseline strategy across K
-contiguous, non-overlapping time windows and concatenates the per-window
-returns into a single series.
+contiguous, non-overlapping time windows and concatenates the
+per-window returns into a single series.
 
 Why windows for naive baselines: the strategy has no trainable
 parameters, so there is no "training" to walk forward. What we want to
 verify is **stability** — does the strategy's Sharpe hold up across
 different market regimes? — and **statistical power** — does the
-concatenated series have enough observations to test significance?
-
-The per-window Sharpe is reported as a stability check; the concatenated
+concatenated series have enough observations to test significance? The
+per-window Sharpe is reported as a stability check; the concatenated
 returns feed DSR / CI / MinBTL.
+
+Funding (B4): when `funding` is provided, each window receives only the
+funding events inside its timestamp range. B3's engine applies them as
+cash flows.
 
 Author: Marco Pérez Padilla
 Date:   22-10-2026
@@ -46,6 +49,7 @@ class FoldResult:
     end: datetime
     n_returns: int
     metrics: PerformanceMetrics
+    total_funding_quote: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +61,7 @@ class WalkForwardStrategyResult:
     returns: np.ndarray  # concatenated
     metrics: PerformanceMetrics  # on concatenated series
     periods_per_year: int
+    total_funding_quote: float = 0.0
 
 
 class WalkForwardBaselineEvaluator:
@@ -82,6 +87,7 @@ class WalkForwardBaselineEvaluator:
         strategy: BaselineStrategy,
         ohlcv: pl.DataFrame,
         rebalance_freq_bars: int,
+        funding: pl.DataFrame | None = None,
     ) -> WalkForwardStrategyResult:
         """Split the OHLCV timeline into n_folds contiguous, non-overlapping
         windows; run the strategy in each; concatenate per-period returns."""
@@ -99,11 +105,18 @@ class WalkForwardBaselineEvaluator:
 
         per_fold: list[FoldResult] = []
         all_returns: list[np.ndarray] = []
+        total_funding = 0.0
 
         for k, (start_ts, end_ts) in enumerate(boundaries):
             window = ohlcv.filter(
                 (pl.col("timestamp") >= start_ts) & (pl.col("timestamp") <= end_ts)
             )
+            window_funding = None
+            if funding is not None:
+                window_funding = funding.filter(
+                    (pl.col("timestamp") >= start_ts) & (pl.col("timestamp") <= end_ts)
+                )
+
             weights = strategy.generate_weights(window, rebalance_freq_bars)
 
             cfg = BacktestConfig(
@@ -117,9 +130,10 @@ class WalkForwardBaselineEvaluator:
                 bars_per_day=self._template.bars_per_day,
                 rebalance_freq_bars=self._template.rebalance_freq_bars,
                 risk_free_rate_annual=self._template.risk_free_rate_annual,
+                apply_funding=self._template.apply_funding,
             )
             engine = BacktestEngine(cfg, SimulatedBroker(cfg))
-            report = engine.run(weights, window)
+            report = engine.run(weights, window, funding=window_funding)
 
             per_fold.append(
                 FoldResult(
@@ -128,8 +142,10 @@ class WalkForwardBaselineEvaluator:
                     end=end_ts,
                     n_returns=int(report.metrics.n_periods),
                     metrics=report.metrics,
+                    total_funding_quote=report.total_funding_quote,
                 )
             )
+            total_funding += report.total_funding_quote
             if len(report.returns) > 0:
                 all_returns.append(report.returns)
 
@@ -147,6 +163,7 @@ class WalkForwardBaselineEvaluator:
                 "n_folds": self._n_folds,
                 "n_returns": len(concatenated),
                 "sharpe_aggregate": round(float(aggregate.sharpe), 3),
+                "funding_quote": round(total_funding, 4),
             },
         )
 
@@ -156,4 +173,5 @@ class WalkForwardBaselineEvaluator:
             returns=concatenated,
             metrics=aggregate,
             periods_per_year=self._template.periods_per_year,
+            total_funding_quote=total_funding,
         )

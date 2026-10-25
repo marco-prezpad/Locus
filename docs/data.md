@@ -651,9 +651,19 @@ time universe, or continuity **invalidates the pre-registration** and
 requires a new protocol version (`v3.1`, `v4`, …). The pre-registration
 is the contract; the data layer is its foundation.
 
-### Known coverage gap: BTC
+### Known coverage gaps (snapshot 2026-10-01)
 
-BTC has ~2,556 funding events vs ~3,285 for ETH/SOL/BNB/XRP in the snapshot
-ending 2026-10-01 (~243 days less history, or a data gap). This is expected
-and does not affect feature correctness (warm-up nulls are per-asset), but it
-does mean BTC has a shorter usable sample for cross-asset comparisons.
+| Assets | Bars | Range |
+|---|---|---|
+| BTC, ETH, SOL, BNB, XRP | 43,799 | 2021-10-02 → 2026-09-30 |
+| ADA, AVAX, DOGE, DOT, LINK | 17,021 | 2024-10-21 → 2026-10-01 |
+
+The common timestamp range across all ten assets is
+**2024-10-21 20:00 UTC → 2026-09-30 23:00 UTC** (17,020 hourly bars).
+Scripts that run a portfolio-level backtest across the full universe must
+align to this range (`scripts/smoke_b3.py` does it automatically).
+
+Funding data is present only for **BTC, ETH, SOL, BNB, XRP** in this
+snapshot. Portfolio-level funding metrics therefore reflect only the covered
+subset of capital (50% under equal weight). Extending funding coverage to the
+remaining five assets is tracked as a follow-up.

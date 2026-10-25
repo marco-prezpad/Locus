@@ -7,9 +7,10 @@ A strategy produces a weights DataFrame with columns
 (timestamp, asset_id, weight) at rebalance timestamps. Weights sum to
 <= 1 at each timestamp (the difference is cash, which earns 0).
 
-The evaluator is strategy-agnostic: it takes weights + OHLCV and
-produces an equity curve. This separation lets F6 (event-driven
-backtester) and F9 (ML models) reuse the same weights interface.
+The evaluator is strategy-agnostic: it takes weights + OHLCV (+ optional
+funding) and produces an equity curve. This separation lets F6
+(event-driven backtester) and F9 (ML models) reuse the same weights
+interface.
 
 Author: Marco Pérez Padilla
 Date:   22-10-2026
@@ -52,7 +53,9 @@ class EvaluationResult:
 
     strategy_name: str
     equity_curve: np.ndarray  # shape (n+1,), starts at 1.0
-    returns: np.ndarray  # shape (n,), per-rebalance returns
+    returns: np.ndarray  # shape (n,), per-rebalance NET returns
     weights_used: pl.DataFrame  # (timestamp, asset_id, weight, asset_return)
     metrics: PerformanceMetrics
     periods_per_year: int
+    total_funding_cost: float = 0.0  # signed: positive means funding paid
+    n_funding_events: int = 0

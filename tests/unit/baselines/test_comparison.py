@@ -80,6 +80,7 @@ def test_comparison_table_columns() -> None:
         "calmar",
         "hit_rate",
         "turnover",
+        "funding_cost",
     }
     assert set(table.columns) == expected
 
