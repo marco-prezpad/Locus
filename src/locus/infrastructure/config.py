@@ -106,10 +106,11 @@ class FeatureSpecConfig(BaseSettings):
 
 
 class FeaturesConfig(BaseSettings):
-    """Active feature set. Order matters only for logging; the pipeline
-    enforces name uniqueness."""
+    """Active feature set. `active` for price features, `funding_active`
+    for funding features. Both use the same FeatureSpecConfig schema."""
 
     active: list[FeatureSpecConfig] = Field(default_factory=list)
+    funding_active: list[FeatureSpecConfig] = Field(default_factory=list)
 
 
 class LabelSpecConfig(BaseSettings):
