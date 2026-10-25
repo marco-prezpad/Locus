@@ -215,6 +215,7 @@ class BacktestConfig(BaseSettings):
     impact_k: float = 1.0
     initial_capital: float = 10_000.0
     fee_schedule_version: str = "binance-spot-2026-01"
+    annualization_days: int = 365
 
 
 class SignalExecutionConfig(BaseSettings):

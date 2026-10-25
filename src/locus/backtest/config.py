@@ -2,14 +2,18 @@
 config.py
 
 BacktestConfig combines everything the engine needs: capital, cost
-model, execution constraints (min notional, lot sizes), time parameters,
-and whether funding cash flows are applied when a funding DataFrame is
-provided.
+model, execution constraints (min notional, lot sizes), time parameters
+(bars_per_day, rebalance_freq_bars, annualization_days), and whether
+funding cash flows are applied when a funding DataFrame is provided.
+
+annualization_days: number of calendar days per year for annualization.
+Default 365 (crypto 24/7). Set to 252 for equities or 360 for some
+fixed-income conventions. periods_per_year = (bars_per_day *
+annualization_days) / rebalance_freq_bars.
 
 Loaders:
 - `load_capital_scenario(name)`: reads `configs/capital/*.yaml`.
-- `load_backtest_config(capital_name, strategy_name, cost_scenario)`:
-  composes a full BacktestConfig.
+- `load_backtest_config(...)`: composes a full BacktestConfig.
 
 Author: Marco Pérez Padilla
 Date:   22-10-2026
@@ -53,7 +57,8 @@ class BacktestConfig:
     bars_per_day: int = 24
     rebalance_freq_bars: int = 24
     risk_free_rate_annual: float = 0.0
-    apply_funding: bool = True  # if funding is provided, apply it
+    annualization_days: int = 365
+    apply_funding: bool = True
 
     def __post_init__(self) -> None:
         if self.capital <= 0:
@@ -64,10 +69,12 @@ class BacktestConfig:
             raise ValueError("bars_per_day must be positive")
         if self.rebalance_freq_bars <= 0:
             raise ValueError("rebalance_freq_bars must be positive")
+        if self.annualization_days <= 0:
+            raise ValueError("annualization_days must be positive")
 
     @property
     def periods_per_year(self) -> int:
-        return int((self.bars_per_day * 365) / self.rebalance_freq_bars)
+        return int((self.bars_per_day * self.annualization_days) / self.rebalance_freq_bars)
 
     def lot_size(self, asset_id: str) -> float:
         return self.lot_sizes.get(asset_id, self.default_lot_size)
@@ -89,6 +96,7 @@ def load_backtest_config(
     bars_per_day: int = 24,
     rebalance_freq_bars: int = 24,
     risk_free_rate_annual: float = 0.0,
+    annualization_days: int = 365,
 ) -> BacktestConfig:
     cap = load_capital_scenario(capital_name)
     return BacktestConfig(
@@ -102,4 +110,5 @@ def load_backtest_config(
         bars_per_day=bars_per_day,
         rebalance_freq_bars=rebalance_freq_bars,
         risk_free_rate_annual=risk_free_rate_annual,
+        annualization_days=annualization_days,
     )

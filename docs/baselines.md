@@ -156,7 +156,59 @@ open price. F6 adds slippage and impact.
 Single-currency: all PnL is in the settlement currency (USDT for
 crypto). Multi-currency handling is documented in currency.md.
 
-## 8. Cross-references
+## 8. FundingLongShortTopK (B5)
+
+Market-neutral funding strategy: long the assets with the lowest funding
+z-score, short the assets with the highest, dollar-neutral by construction.
+
+### Signal
+
+At each rebalance timestamp `t`:
+
+1. Filter to assets with non-null `funding_zscore_30d` at `t` (warm-up
+   excluded). Nulls propagate per-asset; a timestamp with < 2 valid assets
+   generates no weights.
+2. Rank ascending by the feature: lowest funding first.
+3. Long = top `k` (lowest funding), short = bottom `k` (highest).
+   If `2*k > n_valid`, `k_eff = n_valid // 2`.
+4. Weights: `+gross/(2*k_eff)` for each long, `-gross/(2*k_eff)` for each
+   short.
+5. Dollar-neutral: `sum(w) = 0`, `sum(|w|) = gross_exposure`.
+
+Execution: one-bar-delay (`VectorizedEvaluator` opens at `t+1 open`, holds
+for `holding_period_bars`, closes at `t+1+h` open). No look-ahead: features
+at `t` only use data with timestamp <= `t`.
+
+### Parameters
+
+| Parameter | Default | Scale |
+|---|---|---|
+| `feature` | `funding_zscore_30d` | Any funding feature from B2 |
+| `k` | `2` | 2-5 for ~10 assets, 10-20 for 200+ assets |
+| `gross_exposure` | `1.0` | 1.0 conservative, 2.0 long/short equity standard |
+| `horizon_bars` | `8` | Must be <= `rebalance_bars` |
+| `rebalance_bars` | `8` | Must be >= `horizon_bars` |
+
+`k` and `gross_exposure` are intended to be tuned from config/CLI as the
+universe grows; no code changes needed.
+
+### Interaction with funding cash flows
+
+The strategy itself does not model funding — that is the evaluator's job
+(B4). Sign convention: positive funding rate ⇒ longs pay shorts.
+Because the strategy is short high-funding assets and long low-funding
+assets, the expected total funding cost should be <= 0 (the shorts receive
+or pay little). `comparison_table()` exposes `funding_cost` for verification.
+
+### Validation
+
+- `horizon_bars <= rebalance_bars` enforced at construction. With
+  `(8, 8)` no labels overlap and no uniqueness weights are required.
+  With `rebalance < horizon`, the constructor raises a `ValueError`.
+- Leakage test: `test_longshort_no_leakage_under_truncation` pins
+  invariance under truncation (same pattern as B2's funding leakage test).
+
+## 9. Cross-references
 
 - `docs/features.md` — source of return_20 and other features.
 - `docs/datasets.md` — labels, splits, n_eff.

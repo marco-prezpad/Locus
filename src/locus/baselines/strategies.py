@@ -182,3 +182,134 @@ class RandomTopK:
             )
 
         return _weights_at_rebalances(df, reb, fn)
+
+
+class FundingLongShortTopK:
+    """Market-neutral funding strategy: long low funding, short high funding.
+
+    At each rebalance timestamp t:
+    - Filter to assets with non-null `feature` at t (warm-up excluded).
+    - Rank by `feature` ascending: lowest funding first.
+    - Long = top k (lowest funding z-score), short = bottom k (highest).
+    - Weights: +gross/(2*k_eff) for each long, -gross/(2*k_eff) for each short.
+    - Dollar-neutral: sum(w) = 0, sum(|w|) = gross_exposure.
+
+    If fewer than 2*k assets have a valid feature at t, k_eff = n_valid // 2
+    (reduced automatically). If n_valid < 2, no weights at that timestamp.
+
+    Parameters
+    ----------
+    feature:
+        Feature column to rank on. Default 'funding_zscore_30d' from B2.
+    k:
+        Number of long positions (and, symmetrically, of short positions).
+        Scale with universe size: 2-5 for ~10 assets, 10-20 for 200+ assets.
+        Change via constructor, CLI (`--k`), or YAML config.
+    gross_exposure:
+        sum(|w|) per rebalance. Default 1.0 (each side carries 0.5 of
+        capital). Set to 2.0 for standard long/short equity sizing
+        (each side carries 1.0).
+    horizon_bars:
+        Expected label horizon in bars. Must be <= rebalance_bars to
+        avoid overlapping labels. Used for validation only.
+    rebalance_bars:
+        Expected rebalance frequency in bars. Must be >= horizon_bars.
+        Used for validation only; the actual rebalance is driven by the
+        `rebalance_freq` argument of `generate_weights`.
+
+    Notes
+    -----
+    - No look-ahead: weights at t use only features at t (close of bar t),
+      which are executed at t+1 open by the evaluator.
+    - Funding itself is applied by the evaluator (B4) as a signed cash flow,
+      not by this strategy. Shorts of high-funding assets should therefore
+      receive funding; the evaluator enforces the sign convention.
+    """
+
+    def __init__(
+        self,
+        feature: str = "funding_zscore_30d",
+        k: int = 2,
+        gross_exposure: float = 1.0,
+        horizon_bars: int = 8,
+        rebalance_bars: int = 8,
+    ) -> None:
+        if k < 1:
+            raise ValueError("k must be >= 1")
+        if gross_exposure <= 0:
+            raise ValueError("gross_exposure must be > 0")
+        if horizon_bars < 1:
+            raise ValueError("horizon_bars must be >= 1")
+        if rebalance_bars < horizon_bars:
+            raise ValueError(
+                f"rebalance_bars ({rebalance_bars}) must be >= "
+                f"horizon_bars ({horizon_bars}): labels would overlap "
+                f"and uniqueness weights would be required"
+            )
+        self._feature = feature
+        self._k = k
+        self._gross = gross_exposure
+        self._horizon = horizon_bars
+        self._rebalance = rebalance_bars
+
+    @property
+    def name(self) -> str:
+        return f"funding_longshort_topk_k{self._k}_h{self._horizon}_r{self._rebalance}"
+
+    def generate_weights(self, df: pl.DataFrame, rebalance_freq: int) -> pl.DataFrame:
+        """Return DataFrame[timestamp, asset_id, weight] at rebalance
+        timestamps. Every `rebalance_freq` bars starting from the first."""
+        if self._feature not in df.columns:
+            raise ValueError(f"{self.name!r} requires column {self._feature!r}")
+        if rebalance_freq < 1:
+            raise ValueError("rebalance_freq must be >= 1")
+
+        empty_schema = {
+            "timestamp": pl.Datetime("us", "UTC"),
+            "asset_id": pl.Utf8,
+            "weight": pl.Float64,
+        }
+
+        all_ts = sorted(df["timestamp"].unique().to_list())
+        if not all_ts:
+            return pl.DataFrame(schema=empty_schema)
+
+        rebalance_ts = all_ts[::rebalance_freq]
+        sub = df.filter(pl.col("timestamp").is_in(rebalance_ts)).select(
+            ["timestamp", "asset_id", self._feature]
+        )
+
+        rows: list[dict] = []
+        for ts in rebalance_ts:
+            snapshot = sub.filter(pl.col("timestamp") == ts).drop_nulls(self._feature)
+            n_valid = snapshot.height
+            if n_valid < 2:
+                continue
+            # Skip timestamps where all features are equal: no cross-sectional
+            # signal (e.g. all zeros after std==0 fallback in B2, or all-tied
+            # funding rates). Without this, the sort is ambiguous and
+            # long/short assignment becomes arbitrary.
+            if snapshot[self._feature].n_unique() < 2:
+                continue
+            k_eff = min(self._k, n_valid // 2)
+            if k_eff < 1:
+                continue
+            # Deterministic tiebreaker: sort by (feature, asset_id) so that
+            # equal feature values do not produce run-to-run differences.
+            ordered = snapshot.sort([self._feature, "asset_id"])
+            w = self._gross / (2 * k_eff)
+            for row in ordered.head(k_eff).iter_rows(named=True):
+                rows.append({"timestamp": ts, "asset_id": row["asset_id"], "weight": w})
+            for row in ordered.tail(k_eff).iter_rows(named=True):
+                rows.append(
+                    {
+                        "timestamp": ts,
+                        "asset_id": row["asset_id"],
+                        "weight": -w,
+                    }
+                )
+
+        if not rows:
+            return pl.DataFrame(schema=empty_schema)
+
+        return pl.DataFrame(rows).with_columns(pl.col("timestamp").cast(pl.Datetime("us", "UTC")))
