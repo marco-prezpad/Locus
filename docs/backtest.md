@@ -158,7 +158,32 @@ of fills and execution costs.
     at `exec_ts` from retroactively "owing" funding for an event that occurred
     hours earlier.
 
-## 9. Cross-references
+## 9. Funding in the vectorized evaluator (B4)
+
+B3 added funding to the event-driven `BacktestEngine`. B4 brings the same
+cash-flow semantics to the vectorized `VectorizedEvaluator`, used by the
+naïve baselines and the walk-forward evaluator.
+
+- **Where it applies:** each weight row defines a holding period
+  `(exec_ts, exit_ts]`. All funding events whose timestamp falls in that
+  interval are summed and charged to the period:
+  `net_return = gross_return - weight * sum(funding_rate)`.
+- **Sign convention:** identical to B3. Positive funding rate ⇒ longs pay.
+  A negative weight (short) with positive funding rate increases the return.
+- **Boundary rule:** an event exactly at `exec_ts` belongs to the previous
+  period (excluded); an event exactly at `exit_ts` belongs to the current
+  period (included). Timestamps are truncated to the minute to absorb the
+  2-3 ms drift observed in production.
+- **Output:** `EvaluationResult.total_funding_cost` (signed; positive means
+  funding paid) and `n_funding_events`. `comparison_table()` adds a
+  `funding_cost` column.
+- **Walk-forward:** `WalkForwardBaselineEvaluator.run(..., funding=...)`
+  slices funding per window and passes it to the engine, so the
+  concatenated series is net of funding.
+- **Smoke:** `scripts/smoke_b3.py` runs buy-and-hold with and without
+  funding and prints the funding share of capital.
+
+## 10. Cross-references
 
 - `docs/baselines.md` — the strategies being evaluated.
 - `docs/features.md` — the source features.
