@@ -99,7 +99,15 @@ data:
     max_retries: 5
     expected_cadence_hours: 8
     default_end_date: "2026-10-01"
-    universe_assets: ["BTC", "ETH", "SOL", "BNB", "XRP"]
+    universe_assets: ["BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "AVAX", "DOGE", "DOT", "LINK"]
+
+strategies:
+  funding_longshort_topk:
+    feature: funding_zscore_30d
+    k: 2
+    gross_exposure: 1.0
+    horizon_bars: 8
+    rebalance_bars: 8
 
 model:
   default_horizon_hours: 24
@@ -124,6 +132,7 @@ backtest:
   impact_k: 1.0
   initial_capital: 10000.0
   fee_schedule_version: "binance-spot-2026-01"
+  annualization_days: 365
 
 signal_execution:
   feature_compute_time: "bar_close_T"
