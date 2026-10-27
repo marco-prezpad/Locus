@@ -2251,6 +2251,7 @@ all = [
     { name = "torch" },
     { name = "tqdm" },
     { name = "transformers" },
+    { name = "websockets" },
     { name = "xgboost" },
 ]
 backtest = [
@@ -2268,6 +2269,7 @@ data = [
     { name = "pyarrow" },
     { name = "scipy" },
     { name = "tenacity" },
+    { name = "websockets" },
 ]
 dev = [
     { name = "pre-commit" },
@@ -2312,6 +2314,7 @@ mvp = [
     { name = "scipy" },
     { name = "streamlit" },
     { name = "tenacity" },
+    { name = "websockets" },
     { name = "xgboost" },
 ]
 notebooks = [
@@ -2355,6 +2358,7 @@ requires-dist = [
     { name = "torch", marker = "extra == 'dl'", specifier = ">=2.5", index = "https://download.pytorch.org/whl/cu128" },
     { name = "tqdm", marker = "extra == 'notebooks'", specifier = ">=4.66" },
     { name = "transformers", marker = "extra == 'dl'", specifier = ">=4.45" },
+    { name = "websockets", marker = "extra == 'data'", specifier = ">=13.0" },
     { name = "xgboost", marker = "extra == 'ml'", specifier = ">=2.1" },
 ]
 provides-extras = ["dev", "data", "ml", "dl", "backtest", "dashboard", "mlops", "notebooks", "mvp", "all"]
