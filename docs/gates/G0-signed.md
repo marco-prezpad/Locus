@@ -1,7 +1,7 @@
 # G0 — Platform reliability gate
 
 **Plan version:** v3.1 §14
-**Commit:** `<SHA del merge del PR de P0>` — fill in after merge
+**Commit:** `0dcaacfcc5ebcaa9fbf928735064f12abde31573` —
 **Date:** 2026-10-27
 **Decision:** APPROVED
 
