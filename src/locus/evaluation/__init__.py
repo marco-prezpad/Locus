@@ -29,6 +29,19 @@ from locus.evaluation.significance import (
     probability_of_backtest_overfitting,
     significance_summary,
 )
+from locus.evaluation.validation import (
+    DSRResult,
+    PBOResult,
+    ValidationReport,
+    compute_dsr,
+    compute_pbo,
+    control_c1_random_weights,
+    control_c2_permute_features,
+    control_c3_shift_labels,
+    paired_sharpe_diff,
+    run_validation,
+    stationary_bootstrap_sharpe_ci,
+)
 
 if TYPE_CHECKING:
     from locus.evaluation.g0 import (
@@ -64,6 +77,17 @@ __all__ = [
     "minimum_backtest_length",
     "probability_of_backtest_overfitting",
     "significance_summary",
+    "PBOResult",
+    "DSRResult",
+    "ValidationReport",
+    "compute_dsr",
+    "compute_pbo",
+    "control_c1_random_weights",
+    "control_c2_permute_features",
+    "control_c3_shift_labels",
+    "paired_sharpe_diff",
+    "run_validation",
+    "stationary_bootstrap_sharpe_ci",
 ]
 
 

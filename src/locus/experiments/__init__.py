@@ -1,4 +1,4 @@
-"""Experiment tracking: trial registry and (later) the run_experiment CLI."""
+"""Experiment tracking: trial registry and run_experiment CLI."""
 
 from locus.experiments.registry import (
     Trial,
