@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 import polars as pl
 
@@ -67,3 +68,84 @@ class WalkForwardFold:
     train: DatasetSplit
     val: DatasetSplit
     test: DatasetSplit
+
+
+@dataclass(frozen=True, slots=True)
+class CostAssumption:
+    """Fixed round-trip cost assumption for label netting (plan §7.3).
+
+    Labels must reflect net-of-costs returns so that any model trained on
+    them optimises against the executable target, not the gross one. The
+    engine applies costs per side; for labels we use a fixed round-trip
+    estimate derived from the same central scenario, because position size
+    is unknown at label time (it depends on model weights).
+
+    `round_trip_bps` = 2 * (fee + spread/2 + slippage + impact) per side.
+    The spread is halved because you cross it once per side, not once per
+    round trip (buy at ask, sell at bid → one spread crossed total).
+
+    A `from_config` helper reads the central/pessimistic/optimistic
+    scenario from `configs/base.yaml` so that labels and backtests agree
+    by construction.
+    """
+
+    fee_bps: float
+    spread_bps: float
+    slippage_bps: float
+    impact_bps: float
+
+    def __post_init__(self) -> None:
+        for name in ("fee_bps", "spread_bps", "slippage_bps", "impact_bps"):
+            v = getattr(self, name)
+            if v < 0:
+                raise ValueError(f"{name} must be >= 0, got {v}")
+
+    @property
+    def round_trip_bps(self) -> float:
+        per_side = self.fee_bps + self.spread_bps / 2.0 + self.slippage_bps + self.impact_bps
+        return 2.0 * per_side
+
+    @classmethod
+    def from_config(
+        cls,
+        config: Any,
+        scenario: str = "central",
+    ) -> CostAssumption:
+        """Read cost fields from one of three shapes:
+
+        1. `ExperimentConfig.costs` (has `.central`, `.pessimistic`, ...)
+        2. `Config` (has `.backtest` which is a `BacktestConfig`)
+        3. `BacktestConfig` directly (has `.fee_bps`, `.spread_bps`, ...)
+
+        `scenario` is only used for shape 1. For shapes 2 and 3 the
+        scenario concept does not apply (the values are already fixed).
+        """
+        # Shape 1: ExperimentConfig.costs
+        if hasattr(config, "central"):
+            sc = getattr(config, scenario)
+            return cls(
+                fee_bps=float(sc.fee_bps),
+                spread_bps=float(sc.spread_bps),
+                slippage_bps=float(sc.slippage_bps),
+                impact_bps=float(sc.impact_bps),
+            )
+        # Shape 2: Config (unwrap .backtest)
+        if hasattr(config, "backtest"):
+            bt = config.backtest
+            return cls(
+                fee_bps=float(bt.fee_bps),
+                spread_bps=float(bt.spread_bps),
+                slippage_bps=float(bt.slippage_bps),
+                impact_bps=float(bt.impact_bps),
+            )
+        # Shape 3: BacktestConfig directly
+        if hasattr(config, "fee_bps"):
+            return cls(
+                fee_bps=float(config.fee_bps),
+                spread_bps=float(config.spread_bps),
+                slippage_bps=float(config.slippage_bps),
+                impact_bps=float(
+                    getattr(config, "impact_bps", None) or getattr(config, "impact_k", 1.0)
+                ),
+            )
+        raise ValueError(f"Cannot extract CostAssumption from {type(config).__name__}")

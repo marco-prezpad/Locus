@@ -213,6 +213,7 @@ class BacktestConfig(BaseSettings):
     slippage_bps: float = 5.0
     impact_model: str = "sqrt_volume"
     impact_k: float = 1.0
+    impact_bps: float = 1.0
     initial_capital: float = 10_000.0
     fee_schedule_version: str = "binance-spot-2026-01"
     annualization_days: int = 365

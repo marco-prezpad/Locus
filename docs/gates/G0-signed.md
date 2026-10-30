@@ -1,7 +1,7 @@
 # G0 — Platform reliability gate
 
 **Plan version:** v3.1 §14
-**Commit:** `0dcaacfcc5ebcaa9fbf928735064f12abde31573` —
+**Commit:** `<SHA del merge del PR de P0>` — fill in after merge
 **Date:** 2026-10-27
 **Decision:** APPROVED
 
@@ -20,10 +20,18 @@
 2. **Engine formal validation pending.** P6 requires slippage calibrated on real trades. P1.c (microstructure capture) starts now; the calibration is only meaningful after ≥4 weeks of data.
 3. **Universe U10 fixed.** Subject to survivorship bias (plan R6). Any experiment using U10 must declare this limitation.
 
-## Conditions for opening G1 (T1 pre-registration)
+## Scope of this gate
 
-- Trial registry count reconciles with the actual number of configurations tested, or the discrepancy is documented and accepted.
-- P1.c capture running continuously for ≥4 weeks with documented gaps < 1%.
-- T1 pre-registration file committed **before** running T1.
+G0 approves the **platform reliability** for research: backtests, walk-forward, validation, registry. It does **not** gate any specific hypothesis.
+
+The path from G0 to G1 (T1 verdict) is:
+
+1. Pre-register T1 (config, criteria, controls, abandonment plan) in a signed commit.
+2. Run T1 through the P0 CLI.
+3. G1 verdict per plan §7.4 criteria E1-E10, without reinterpretation.
+
+## Note on A4 (not a G1 condition)
+
+Hypothesis A4 (microstructure) is a **separate alternative**, activated only if T1 fails (plan §8.2, D2). It is not a precondition of G1. A4's own pre-registration requires ≥4 weeks of clean P1.c data (plan §9), but T1 does not depend on P1.c.
 
 **Signed by:** Marco Pérez Padilla on 2026-10-27

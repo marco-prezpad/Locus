@@ -1,117 +1,227 @@
-"""
-registry.py
-
-Trial registry for experiment tracking (plan v3.1, P0 deliverable 2).
-
-Every configuration evaluated is a trial. The registry is the source of
-truth for n_trials in DSR and PBO. Without it, any p-value is
-overoptimistic (plan §6.3).
-
-Format: JSONL, append-only, versioned in git. One Trial per line.
-"""
+"""Tests for the trial registry (P0 + coverage additions)."""
 
 from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import asdict, dataclass, field
-from datetime import date as date_type
+from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Literal
 
-State = Literal["discarded", "candidate", "promoted", "retired"]
+import pytest
 
-_VALID_STATES: frozenset[str] = frozenset({"discarded", "candidate", "promoted", "retired"})
-
-DEFAULT_PATH = Path("trials/registry.jsonl")
-
-
-@dataclass(frozen=True, slots=True)
-class Trial:
-    """One configuration evaluated. See docs/conventions.md for the schema."""
-
-    id: str
-    date: str
-    thesis: str
-    hypothesis: str
-    config_hash: str
-    data_hash: str
-    commit: str
-    metrics: dict[str, Any] = field(default_factory=dict)
-    state: str = "discarded"
-    description: str = ""
-
-    def __post_init__(self) -> None:
-        try:
-            date_type.fromisoformat(self.date)
-        except ValueError as exc:
-            raise ValueError(f"date must be YYYY-MM-DD, got {self.date!r}") from exc
-
-        parts = self.id.split("-")
-        if len(parts) != 3:
-            raise ValueError(f"id must be <THESIS>-<YYYYMMDD>-<NN>, got {self.id!r}")
-        thesis, datepart, seq = parts
-        if not thesis or len(datepart) != 8 or not datepart.isdigit():
-            raise ValueError(f"bad id format: {self.id!r}")
-        if len(seq) != 2 or not seq.isdigit():
-            raise ValueError(f"bad id format: {self.id!r}")
-
-        if self.state not in _VALID_STATES:
-            raise ValueError(f"bad state: {self.state!r}")
+from locus.experiments.registry import (
+    Trial,
+    append,
+    count,
+    hash_config,
+    hash_data,
+    load,
+)
 
 
-def hash_config(config: dict[str, Any]) -> str:
-    """SHA-256 of canonical JSON (sorted keys, no whitespace)."""
-    canonical = json.dumps(config, sort_keys=True, separators=(",", ":"))
-    return "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()
+def _trial(trial_id: str = "PB-20261025-01", **overrides: object) -> Trial:
+    base: dict[str, object] = {
+        "id": trial_id,
+        "date": "2026-10-25",
+        "thesis": "PB",
+        "hypothesis": "funding_zscore_30d, k=4, 168h",
+        "config_hash": "sha256:abc",
+        "data_hash": "sha256:def",
+        "commit": "abc1234",
+        "metrics": {"sharpe": -0.224},
+        "state": "discarded",
+        "description": "test",
+    }
+    base.update(overrides)
+    return Trial(**base)  # type: ignore[arg-type]
 
 
-def hash_data(files: list[Path]) -> str:
-    """SHA-256 of (path, content) for each file or directory, sorted by path.
-
-    For directories, all `.parquet` files are collected recursively and
-    hashed in sorted order.
-    """
-    expanded: list[Path] = []
-    for f in files:
-        if f.is_dir():
-            expanded.extend(sorted(f.rglob("*.parquet")))
-        else:
-            expanded.append(f)
-    h = hashlib.sha256()
-    for f in sorted(expanded, key=str):
-        h.update(str(f).encode())
-        h.update(f.read_bytes())
-    return "sha256:" + h.hexdigest()
+# --- hashing ---
 
 
-def load(path: Path = DEFAULT_PATH) -> list[Trial]:
-    """Load all trials. Returns empty list if file does not exist."""
-    if not path.exists():
-        return []
-    trials: list[Trial] = []
-    with path.open(encoding="utf-8") as f:
-        for lineno, line in enumerate(f, start=1):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                trials.append(Trial(**json.loads(stripped)))
-            except (TypeError, ValueError) as exc:
-                raise ValueError(f"{path}:{lineno}: invalid trial: {exc}") from exc
-    return trials
+def test_hash_config_deterministic_regardless_of_key_order() -> None:
+    a = hash_config({"k": 4, "feature": "zscore"})
+    b = hash_config({"feature": "zscore", "k": 4})
+    assert a == b
+    assert a.startswith("sha256:")
+    assert len(a) == len("sha256:") + 64
 
 
-def append(trial: Trial, path: Path = DEFAULT_PATH) -> None:
-    """Append a trial. Fails if the ID already exists."""
-    existing = {t.id for t in load(path)}
-    if trial.id in existing:
-        raise ValueError(f"trial {trial.id!r} already exists in {path}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(asdict(trial), ensure_ascii=False) + "\n")
+def test_hash_config_changes_with_value() -> None:
+    assert hash_config({"k": 4}) != hash_config({"k": 5})
 
 
-def count(path: Path = DEFAULT_PATH) -> int:
-    """Number of trials in the registry."""
-    return len(load(path))
+def test_hash_data_deterministic_across_order(tmp_path: Path) -> None:
+    f1 = tmp_path / "a.parquet"
+    f2 = tmp_path / "b.parquet"
+    f1.write_bytes(b"content-a")
+    f2.write_bytes(b"content-b")
+    assert hash_data([f1, f2]) == hash_data([f2, f1])
+
+
+def test_hash_data_expands_directory(tmp_path: Path) -> None:
+    d = tmp_path / "sub"
+    d.mkdir()
+    (d / "x.parquet").write_bytes(b"x")
+    (d / "y.parquet").write_bytes(b"y")
+    (d / "ignore.txt").write_bytes(b"not-hashed")
+    h = hash_data([d])
+    assert h.startswith("sha256:")
+    (d / "x.parquet").unlink()
+    assert hash_data([d]) != h
+
+
+def test_hash_data_single_file(tmp_path: Path) -> None:
+    f = tmp_path / "a.parquet"
+    f.write_bytes(b"content-a")
+    h = hash_data([f])
+    assert h.startswith("sha256:")
+    f.write_bytes(b"different")
+    assert hash_data([f]) != h
+
+
+def test_hash_data_mixed_file_and_dir(tmp_path: Path) -> None:
+    f = tmp_path / "single.parquet"
+    f.write_bytes(b"single")
+    d = tmp_path / "sub"
+    d.mkdir()
+    (d / "x.parquet").write_bytes(b"x")
+    h = hash_data([f, d])
+    assert h.startswith("sha256:")
+
+
+def test_hash_data_empty_directory(tmp_path: Path) -> None:
+    d = tmp_path / "empty"
+    d.mkdir()
+    h = hash_data([d])
+    assert h == "sha256:" + hashlib.sha256(b"").hexdigest()
+
+
+# --- append / load / count ---
+
+
+def test_append_and_load(tmp_path: Path) -> None:
+    path = tmp_path / "registry.jsonl"
+    append(_trial("PB-20261025-01"), path)
+    append(_trial("PB-20261025-02", hypothesis="other"), path)
+    loaded = load(path)
+    assert [t.id for t in loaded] == ["PB-20261025-01", "PB-20261025-02"]
+
+
+def test_append_duplicate_id_fails(tmp_path: Path) -> None:
+    path = tmp_path / "registry.jsonl"
+    append(_trial("PB-20261025-01"), path)
+    with pytest.raises(ValueError, match="already exists"):
+        append(_trial("PB-20261025-01"), path)
+
+
+def test_append_creates_missing_parents(tmp_path: Path) -> None:
+    path = tmp_path / "a" / "b" / "c" / "registry.jsonl"
+    assert not path.parent.exists()
+    append(_trial("PB-20261025-01"), path)
+    assert path.exists()
+
+
+def test_count(tmp_path: Path) -> None:
+    path = tmp_path / "registry.jsonl"
+    assert count(path) == 0
+    append(_trial("PB-20261025-01"), path)
+    assert count(path) == 1
+
+
+def test_load_missing_file_returns_empty(tmp_path: Path) -> None:
+    assert load(tmp_path / "missing.jsonl") == []
+
+
+def test_round_trip_preserves_data(tmp_path: Path) -> None:
+    path = tmp_path / "registry.jsonl"
+    t = _trial(
+        "PB-20261025-01",
+        metrics={"sharpe": 0.5, "n": 10, "nested": {"x": 1}},
+    )
+    append(t, path)
+    assert load(path)[0] == t
+
+
+def test_load_skips_blank_lines(tmp_path: Path) -> None:
+    path = tmp_path / "registry.jsonl"
+    t = _trial("PB-20261025-01")
+    line = json.dumps(asdict(t))
+    line2 = line.replace("PB-20261025-01", "PB-20261025-02")
+    path.write_text(f"{line}\n\n\n{line2}\n", encoding="utf-8")
+    loaded = load(path)
+    assert [x.id for x in loaded] == ["PB-20261025-01", "PB-20261025-02"]
+
+
+# --- validation ---
+
+
+def test_bad_date() -> None:
+    with pytest.raises(ValueError, match="date"):
+        _trial(date="2026/10/25")
+
+
+def test_id_two_parts() -> None:
+    with pytest.raises(ValueError, match="id"):
+        _trial("PB-20261025")
+
+
+def test_id_four_parts() -> None:
+    with pytest.raises(ValueError, match="id"):
+        _trial("PB-20261025-01-extra")
+
+
+def test_id_empty_thesis() -> None:
+    with pytest.raises(ValueError, match="id"):
+        _trial("-20261025-01")
+
+
+def test_id_short_datepart() -> None:
+    with pytest.raises(ValueError, match="id"):
+        _trial("PB-2026102-01")
+
+
+def test_id_non_numeric_datepart() -> None:
+    with pytest.raises(ValueError, match="id"):
+        _trial("PB-2026102A-01")
+
+
+def test_id_long_seq() -> None:
+    with pytest.raises(ValueError, match="id"):
+        _trial("PB-20261025-001")
+
+
+def test_id_non_numeric_seq() -> None:
+    with pytest.raises(ValueError, match="id"):
+        _trial("PB-20261025-AA")
+
+
+def test_bad_state() -> None:
+    with pytest.raises(ValueError, match="state"):
+        _trial(state="not-a-state")
+
+
+def test_invalid_jsonl_raises(tmp_path: Path) -> None:
+    path = tmp_path / "registry.jsonl"
+    path.write_text("{not valid json}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="invalid trial"):
+        load(path)
+
+
+def test_load_invalid_trial_fields(tmp_path: Path) -> None:
+    path = tmp_path / "registry.jsonl"
+    bad = {
+        "id": "not-a-valid-id",
+        "date": "2026-10-25",
+        "thesis": "PB",
+        "hypothesis": "h",
+        "config_hash": "sha256:x",
+        "data_hash": "sha256:y",
+        "commit": "abc",
+        "metrics": {},
+        "state": "discarded",
+        "description": "",
+    }
+    path.write_text(json.dumps(bad) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="invalid trial"):
+        load(path)
