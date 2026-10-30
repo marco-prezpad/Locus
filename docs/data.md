@@ -667,3 +667,84 @@ Funding data is present only for **BTC, ETH, SOL, BNB, XRP** in this
 snapshot. Portfolio-level funding metrics therefore reflect only the covered
 subset of capital (50% under equal weight). Extending funding coverage to the
 remaining five assets is tracked as a follow-up.
+
+---
+
+## 16. Cost assumptions (P4)
+
+Labels use a fixed round-trip cost assumption derived from the same
+scenario as the backtest. The three scenarios from `configs/base.yaml`:
+
+| Scenario | Fee | Spread | Slippage | Impact | Round-trip |
+|---|---|---|---|---|---|
+| optimistic | 5 | 2 | 2 | 0.5 | 2 × 8.75 = 17.5 bps |
+| central | 10 | 5 | 5 | 1 | 2 × 18.5 = 37 bps |
+| pessimistic | 20 | 10 | 10 | 2 | 2 × 33 = 66 bps |
+
+The central scenario is the default for label construction (P4) and
+walk-forward (P6). T1 pre-registration documents which scenario the
+labels and verdict use; changing it mid-experiment is a methodological
+change per plan §4.1 and requires a new trial.
+
+The pessimistic round-trip (66 bps) is what E8 in plan §7.4 tests: a
+strategy that survives 66 bps per round-trip is robust to cost
+assumptions. A strategy that only survives the optimistic scenario
+(17.5 bps) is fragile and should not be promoted.
+
+### `impact_bps` vs `impact_k`
+
+`configs/base.yaml` carries two impact fields under `backtest:`:
+
+    impact_model: "sqrt_volume"
+    impact_k:     1.0   # engine: impact ∝ impact_k * sqrt(size / daily_volume)
+    impact_bps:   1.0   # labels: fixed bps added to the round-trip cost
+
+The engine uses `impact_k` because it knows the position size and the
+daily volume at execution time. Labels use `impact_bps` because at label
+time neither is known: the model's future weights depend on training,
+which depends on the labels. A fixed assumption is the only defensible
+choice (plan §7.3 proposal: 1 bps per side).
+
+In the central scenario they coincide (1.0). Other scenarios can differ:
+a pessimistic scenario may set `impact_k: 2.0` (engine) and
+`impact_bps: 2.0` (labels), or diverge deliberately if the engine's
+model is deemed unrealistic at small sizes.
+
+### Labels path
+
+After running `scripts/build_labels.py`, labels land in
+`data/processed/labels/{ASSET}.parquet` with one row per (timestamp,
+asset) and columns:
+
+- `future_return_{h}h` (gross, diagnostics)
+- `future_return_{h}h_net` (net, training target)
+- `probability_positive` (binary)
+
+Files are per-asset, one per U10 asset. Regenerating with a different
+cost scenario is a new file, not a modification.
+
+Because label files preserve the bar schema, `build_labels.py` and
+`verify_splits.py` exclude the `labels` directory explicitly when
+discovering bars. This avoids re-processing labels as if they were raw
+OHLCV.
+
+## Coverage snapshot for label construction (2026-10-30)
+
+Labels are built on the aligned U10 bars, using the same bar discovery
+and alignment as the backtest:
+
+| Item | Value |
+|---|---|
+| Assets | 10 (BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, DOT, LINK) |
+| Bars (aligned) | 170,200 (17,020 timestamps × 10 assets) |
+| Range | 2024-10-21 20:00 UTC → 2026-09-30 23:00 UTC |
+| Label rows | 169,950 (tail rows without exit price dropped) |
+| Horizon | 24h (T1), 168h (diagnostics) |
+| Cost scenario | central (37 bps round-trip) |
+
+The bars themselves come from `scripts/backfill.py` (spot OHLCV from
+Binance). Funding for the same U10 universe comes from
+`scripts/backfill_funding.py` (perp funding from Binance Futures, 21,270
+events). Both datasets share the same aligned timestamp range; any
+mismatch means the bars backfill needs to run again before building
+labels.

@@ -256,6 +256,188 @@ These are deliberate gaps, not bugs:
   `future_return_24h` into a multi-target dataset. F5 uses the primary
   label; F9+ can extend.
 
+## Net-of-costs labels (P4)
+
+Training labels must reflect the executable target, not the gross return.
+A model optimised on gross returns will overfit to short-lived moves that
+costs would erase. `LabelBuilder` now produces two variants per horizon:
+
+| Column | Meaning |
+|---|---|
+| `future_return_{h}h` | Gross: `open[t+1+h] / open[t+1] - 1` (diagnostics only) |
+| `future_return_{h}h_net` | Net: gross minus `CostAssumption.round_trip_bps / 10000` |
+| `probability_positive` | Binary: 1 if `<source> > u`, else 0 (null where source is null) |
+
+The training target for T1 is `future_return_24h_net` (plan §7.3). The
+binary label uses `u = 0.0` by default; the pre-registration fixes `u`
+before running T1.
+
+### Timing (entry at open[t+1])
+
+Labels use `price_field="open"` with `entry_offset_bars=1`:
+
+    label[t] = open[t+1+h] / open[t+1] - 1
+
+Not `open[t+h] / open[t] - 1`. The reason is that features at `t` use
+`close[t]`, and the strategy executes at `open[t+1]`. Entry at `open[t+1]`
+matches the executable window and eliminates the close-to-open gap that
+would otherwise overstate the label by one bar's drift.
+
+The default for the existing `TrainingDatasetBuilder` is
+`price_field="close"`, `entry_offset_bars=0` (legacy). The P4 scripts
+(`build_labels.py`, `verify_splits.py`) and the T1 pre-registration use
+the plan §7.3 semantics (`open`, offset 1).
+
+### Round-trip cost formula
+
+    round_trip_bps = 2 * (fee_bps + spread_bps/2 + slippage_bps + impact_bps)
+
+The `2 *` is because a position opens and closes (two sides). The
+`spread_bps / 2` inside the parenthesis is because the spread is crossed
+once per round trip (buy at ask, sell at bid), not once per side.
+
+`CostAssumption.from_config(config, scenario)` reads from the same YAML
+block as the backtest, so labels and P&L agree by construction. Changing
+the cost scenario changes both together.
+
+### `impact_bps` vs `impact_k`
+
+The engine's market impact is modelled as `sqrt(volume) * impact_k`. This
+is state-dependent: it depends on the size of the position relative to
+the daily volume at the time of execution.
+
+Labels use a **fixed** `impact_bps` instead, because at label time we do
+not know the position size the model will eventually take, nor the future
+volume. A fixed assumption of 1 bps (central scenario) is the plan §7.3
+proposal.
+
+Both fields live in `configs/base.yaml` under `backtest:`:
+
+    impact_k:   1.0   # used by the engine (sqrt_volume model)
+    impact_bps: 1.0   # used by labels (fixed assumption)
+
+In the central scenario they coincide numerically. Other scenarios can
+diverge (the pessimistic scenario raises both; the optimistic lowers
+both), but they remain conceptually distinct.
+
+### Sanity check: gross vs net
+
+For a round-trip of 37 bps, a gross return of 0.5% becomes a net return
+of 0.13%. Any horizon where the median net return is negative means the
+strategy must not trade — the model's `probability_positive` will be 0
+in most rows, and calibration (ECE, Brier) on those rows tests the model
+on the "don't trade" decision, which is the correct default.
+
+## Purge and embargo (P4)
+
+T1 uses `PurgedWalkForwardSplitter` with `horizon_bars=24`,
+`lookback_bars=0`, `test_ratio=0.15`, `n_splits=5`.
+
+### Splitter design (rolling origin, fixed test holdout)
+
+The splitter uses a design that is **not** the classic "test-mobile"
+walk-forward. It combines:
+
+- **Rolling-origin train/val.** Each fold's train and val windows start
+  at the same origin (the first timestamp) and extend further forward.
+  Fold 0 has train 2024-10 to 2025-01 and val 2025-01 to 2025-05.
+  Fold 4 has train 2024-10 to 2026-03 and val 2026-03 to 2026-06.
+- **Fixed test holdout at the end of the series.** Every fold evaluates
+  on the *same* test window (last `test_ratio` of the series). Fold 0
+  trains on 3 months of data and tests on a 3-month window 17 months
+  later; fold 4 trains on 17 months and tests on the same 3-month
+  window 3 months later.
+
+Consequences:
+
+- **Excellent for detecting overfitting**: fold 0's model never sees any
+  data close to the test period. If it generalises, it's not because it
+  memorised the test neighbourhood.
+- **Bad for detecting regime stability**: all folds share the same test
+  window. If that window is a hostile regime, every fold will look
+  negative, even if the strategy works in other regimes.
+
+Therefore, **variance of Sharpe across folds reflects regime, not model
+instability**. The T1 pre-registration must not interpret a high-variance
+Sharpe across folds as evidence of an unstable signal — it is a property
+of the splitter design.
+
+If regime stability becomes a research question later (post-T1), a
+separate test-mobile splitter is a distinct phase. It is not in scope
+for P4 or T1.
+
+### Purge between train and val
+
+`train_end = max(train_ts) - horizon_bars` before slicing. Verified:
+25h gap for horizon=24h (24h purge + 1h bar rounding) on U10.
+
+### Embargo between val and test
+
+Not a separate mechanism — it emerges from the fixed test holdout at the
+end. The smallest embargo occurs in the last fold (fold 4), where val
+ends 2026-06-14 and test starts 2026-06-15: **29h**. Earlier folds have
+gaps of days or months. The plan §9 criterion "embargo de h barras tras
+cada test" is satisfied by construction: there is no data "after the
+test" because test is at the end.
+
+### Verification
+
+`scripts/verify_splits.py` runs the splitter on real data and checks,
+per fold:
+
+- **No timestamp overlap** between train and val, or between val and
+  test (must be zero).
+- **Gap train → val >= horizon** (purge effective).
+- **Gap val → test >= horizon** (embargo effective).
+- **Test fold has >= 30 observations** (plan §9 warning threshold).
+
+Run before pre-registering T1:
+
+    uv run python scripts/verify_splits.py
+
+Exit code 0 confirms the splitter is safe. Exit 1 lists the failing
+checks. Verified on 2026-10-30 on U10 (170,200 bars, 10 assets):
+
+| Fold | Purge train→val | Embargo val→test | Test n | n_eff |
+|---|---|---|---|---|
+| 0 | 25h | 9657h | 25,490 | 1089.8 |
+| 1 | 25h | 7250h | 25,490 | 1089.8 |
+| 2 | 25h | 4843h | 25,490 | 1089.8 |
+| 3 | 25h | 2436h | 25,490 | 1089.8 |
+| 4 | 25h | 29h | 25,490 | 1089.8 |
+
+### Known limitation: label overlap within each fold
+
+Even with purge and embargo, labels **within** a fold overlap: a row at
+`t` with horizon 24h shares its exit price with a row at `t+1` with
+horizon 23h. This is why `uniqueness.py` exists — it assigns weights to
+training samples to compensate. The `DatasetSplit` object exposes
+`weights` and `n_eff` (effective sample size after weight normalisation).
+T1 should use `uniqueness_weights` when computing metrics on training
+rows. Not required for the P4 exit criterion (purge/embargo), but
+relevant for T1 training.
+
+## Label files under `data/processed/labels/`
+
+`scripts/build_labels.py` writes one parquet per asset to
+`data/processed/labels/{ASSET}.parquet`. Each file has one row per
+(timestamp, asset) with columns:
+
+- `future_return_{h}h` (gross, diagnostics)
+- `future_return_{h}h_net` (net, training target)
+- `probability_positive` (binary)
+
+These are inputs to T1's training pipeline. They are **not** the same as
+`data/processed/bars/` — labels are derived, bars are raw. A label file
+regenerated with a different cost scenario is a new file, not a
+modification; document it in the T1 pre-registration commit.
+
+Because the label files share the bar schema (they preserve `open`,
+`high`, `low`, `close`, `volume`), the discovery helpers in
+`build_labels.py` and `verify_splits.py` exclude the `labels` directory
+explicitly. A future refactor to a manifest (`data/manifest.json`) would
+replace this pattern; for P4 the directory-name exclusion is sufficient.
+
 ## 8. Cross-references
 
 - `docs/data.md` — the layer F4 consumes from.
