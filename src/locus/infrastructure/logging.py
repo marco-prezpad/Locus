@@ -94,11 +94,17 @@ class LoggerFactory:
         """Attach a single JSON handler to the root logger at the given
         level. Subsequent calls are no-ops, which makes this safe to call
         from anywhere in the codebase without double handlers.
+
+        `level` is case-insensitive; `"debug"` and `"DEBUG"` are
+        equivalent.
         """
         if cls._configured:
             return
+        numeric = getattr(logging, level.upper(), None)
+        if not isinstance(numeric, int):
+            raise ValueError(f"unknown log level: {level}")
         root = logging.getLogger()
-        root.setLevel(level)
+        root.setLevel(numeric)
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(StructuredFormatter())
         root.addHandler(handler)

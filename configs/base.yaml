@@ -130,6 +130,7 @@ backtest:
   slippage_bps: 5.0
   impact_model: "sqrt_volume"
   impact_k: 1.0
+  impact_bps: 1.0
   initial_capital: 10000.0
   fee_schedule_version: "binance-spot-2026-01"
   annualization_days: 365
