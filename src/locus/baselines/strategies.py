@@ -313,3 +313,91 @@ class FundingLongShortTopK:
             return pl.DataFrame(schema=empty_schema)
 
         return pl.DataFrame(rows).with_columns(pl.col("timestamp").cast(pl.Datetime("us", "UTC")))
+
+
+@dataclass(frozen=True, slots=True)
+class MomentumTrend:
+    """Long-only conditional trend-following per asset.
+
+    At each rebalance timestamp t:
+      - Compute MA_N(close) per asset using only close up to t (no look-ahead).
+      - Asset i gets weight 1 / n_active if close_i(t) > MA_N(close_i)(t).
+      - Asset i gets weight 0 otherwise.
+      - If no asset qualifies, all weights are 0 (portfolio in cash).
+
+    Parameters
+    ----------
+    window : int
+        Moving-average window in bars. Default 168 (7 days on 1h bars).
+    price_col : str
+        Column used for the moving average. Default "close".
+
+    Notes
+    -----
+    This is NOT MomentumTopK with top_k = n_assets. MomentumTopK is
+    market-neutral (long top-K / short bottom-K); MomentumTrend is
+    long-only conditional. Mixing them would introduce an implicit
+    directional bias that breaks the comparison against RandomTopK.
+    """
+
+    window: int = 168
+    price_col: str = "close"
+    _name: str = "momentum_trend"
+
+    def __post_init__(self) -> None:
+        if self.window <= 0:
+            raise ValueError("window must be positive")
+
+    @property
+    def name(self) -> str:
+        return f"momentum_trend_{self.window}"
+
+    def generate_weights(self, df: pl.DataFrame, rebalance_freq: int) -> pl.DataFrame:
+        if self.price_col not in df.columns:
+            raise ValueError(f"price column {self.price_col!r} not in df")
+
+        # MA per asset using only past/current bars. Polars rolling_mean
+        # over an ordered window is causal by construction.
+        df_ma = df.with_columns(
+            pl.col(self.price_col)
+            .rolling_mean(window_size=self.window, min_samples=self.window)
+            .over("asset_id")
+            .alias("_ma")
+        )
+
+        # Only rebalance where at least one asset has a valid MA.
+        candidates = df_ma.filter(pl.col("_ma").is_not_null())
+        if candidates.height == 0:
+            return pl.DataFrame(
+                schema={
+                    "timestamp": pl.Datetime("us", "UTC"),
+                    "asset_id": pl.Utf8,
+                    "weight": pl.Float64,
+                }
+            )
+
+        reb = _rebalance_timestamps(candidates, rebalance_freq)
+
+        def fn(group: pl.DataFrame) -> pl.DataFrame:
+            valid = group.filter(pl.col("_ma").is_not_null())
+            if valid.height == 0:
+                return group.select("asset_id").with_columns(pl.lit(0.0).alias("weight"))
+
+            signal = valid.select(
+                "asset_id",
+                (pl.col(self.price_col) > pl.col("_ma")).alias("_long"),
+            )
+            n_active = int(signal["_long"].sum())
+            if n_active == 0:
+                return signal.select("asset_id").with_columns(pl.lit(0.0).alias("weight"))
+
+            weight = 1.0 / n_active
+            return signal.select(
+                "asset_id",
+                pl.when(pl.col("_long"))
+                .then(pl.lit(weight))
+                .otherwise(pl.lit(0.0))
+                .alias("weight"),
+            )
+
+        return _weights_at_rebalances(df_ma, reb, fn)

@@ -43,6 +43,7 @@ from locus.backtest.broker import SimulatedBroker
 from locus.backtest.config import BacktestConfig
 from locus.backtest.events import BacktestReport, FillEvent
 from locus.backtest.market_state import enrich_with_market_state
+from locus.baselines.evaluator import _compute_turnover
 from locus.evaluation.metrics import compute_metrics
 from locus.infrastructure.logging import LoggerFactory
 
@@ -196,10 +197,12 @@ class BacktestEngine:
         returns = (
             equity[1:] / equity[:-1] - 1.0 if len(equity) > 1 else np.array([], dtype=np.float64)
         )
+        turnover = _compute_turnover(strategy_weights)
         metrics = compute_metrics(
             returns,
             self._config.periods_per_year,
             self._config.risk_free_rate_annual,
+            turnover=turnover,
         )
 
         total_cost_quote = float(sum(f.cost_quote for f in all_fills))
