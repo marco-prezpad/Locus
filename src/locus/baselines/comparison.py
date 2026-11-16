@@ -17,6 +17,7 @@ import polars as pl
 
 from locus.baselines.base import BaselineStrategy, EvaluationResult
 from locus.baselines.evaluator import VectorizedEvaluator
+from locus.evaluation.validation import stationary_bootstrap_sharpe_ci
 from locus.infrastructure.logging import LoggerFactory
 
 
@@ -52,11 +53,29 @@ def run_baselines(
 
 def comparison_table(results: dict[str, EvaluationResult]) -> pl.DataFrame:
     """Build a wide DataFrame with one row per strategy and the main
-    metrics as columns, sorted by Sharpe descending. Returns an empty
-    DataFrame with the expected schema if `results` is empty."""
+    metrics as columns, including bootstrap CIs for Sharpe, sorted by
+    Sharpe descending.
+
+    Returns an empty DataFrame with the expected schema if `results` is
+    empty.
+    """
     rows = []
     for name, r in results.items():
         m = r.metrics
+
+        # Sharpe CI: stationary block bootstrap. Requires >= 10 finite
+        # returns; otherwise NaN (no silent crash, no fake interval).
+        try:
+            ci_low, ci_high = stationary_bootstrap_sharpe_ci(
+                r.returns,
+                r.periods_per_year,
+                block_size=7,
+                n_boot=2000,
+                alpha=0.05,
+            )
+        except ValueError:
+            ci_low, ci_high = float("nan"), float("nan")
+
         rows.append(
             {
                 "strategy": name,
@@ -65,6 +84,8 @@ def comparison_table(results: dict[str, EvaluationResult]) -> pl.DataFrame:
                 "cagr": m.cagr,
                 "volatility": m.volatility,
                 "sharpe": m.sharpe,
+                "sharpe_ci_low": ci_low,
+                "sharpe_ci_high": ci_high,
                 "sortino": m.sortino,
                 "max_drawdown": m.max_drawdown,
                 "calmar": m.calmar,
@@ -83,6 +104,8 @@ def comparison_table(results: dict[str, EvaluationResult]) -> pl.DataFrame:
                 "cagr": pl.Float64,
                 "volatility": pl.Float64,
                 "sharpe": pl.Float64,
+                "sharpe_ci_low": pl.Float64,
+                "sharpe_ci_high": pl.Float64,
                 "sortino": pl.Float64,
                 "max_drawdown": pl.Float64,
                 "calmar": pl.Float64,
