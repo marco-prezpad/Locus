@@ -150,10 +150,12 @@ class WalkForwardBaselineEvaluator:
                 all_returns.append(report.returns)
 
         concatenated = np.concatenate(all_returns) if all_returns else np.array([])
+        turnover_agg = float(np.mean([f.metrics.turnover for f in per_fold])) if per_fold else 0.0
         aggregate = compute_metrics(
             concatenated,
             self._template.periods_per_year,
             self._template.risk_free_rate_annual,
+            turnover=turnover_agg,
         )
 
         self._log.info(

@@ -75,6 +75,8 @@ def test_comparison_table_columns() -> None:
         "cagr",
         "volatility",
         "sharpe",
+        "sharpe_ci_low",
+        "sharpe_ci_high",
         "sortino",
         "max_drawdown",
         "calmar",
@@ -106,3 +108,13 @@ def test_comparison_table_one_row_per_strategy() -> None:
     results = run_baselines(_df(), strategies, evaluator, rebalance_freq=24)
     table = comparison_table(results)
     assert table.height == 2
+
+
+def test_comparison_table_ci_brackets_sharpe() -> None:
+    strategies = [BuyAndHoldBTC(), EqualWeightUniverse()]
+    evaluator = VectorizedEvaluator(holding_period_bars=24, periods_per_year=365)
+    results = run_baselines(_df(n=200), strategies, evaluator, rebalance_freq=24)
+    table = comparison_table(results)
+    for row in table.iter_rows(named=True):
+        if row["sharpe_ci_low"] == row["sharpe_ci_low"]:  # not NaN
+            assert row["sharpe_ci_low"] <= row["sharpe"] <= row["sharpe_ci_high"]
